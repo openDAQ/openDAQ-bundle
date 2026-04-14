@@ -42,10 +42,10 @@ cmake --preset="x64/gcc/release"
 
 ```bash
 # Windows
-cmake --build --preset="x64/msvc-22" --config Release
+cmake --build build\x64\msvc-22 --config Release
 
 # Linux
-cmake --build --preset="x64/gcc/release"
+cmake --build build/x64/gcc/release
 ```
 
 ## CMake Options
