@@ -1,4 +1,4 @@
-﻿set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 cmake_minimum_required(VERSION 3.25)
 
 set(REPO_NAME ReleaseRepo)
@@ -18,16 +18,27 @@ option(${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE "Enable ASAM-CMP modules" ON
 
 include(FetchContent)
 
+# fetch the cmake utilities first, as they are used by the other modules
+FetchContent_Declare(
+    opendaq-cmake-utils
+    GIT_REPOSITORY https://github.com/openDAQ/opendaq-cmake-utils.git
+    GIT_TAG        v1.0.1
+    GIT_PROGRESS   ON
+)
+FetchContent_MakeAvailable(opendaq-cmake-utils)
+
 FetchContent_Declare(
     opendaq
     GIT_REPOSITORY https://github.com/openDAQ/openDAQ.git
-    GIT_TAG opendaq-bundle-fixes
+    GIT_TAG main
     GIT_PROGRESS   ON
+    GIT_SHALLOW    OFF
+    SOURCE_SUBDIR  "INVALID"
+    GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
 )
 
 set(OPENDAQ_ENABLE_OPCUA OFF CACHE BOOL "")
 set(OPENDAQ_ENABLE_OPCUA_INTEGRATION_TESTS OFF CACHE BOOL "")
-
 
 set(OPENDAQ_GENERATE_DELPHI_BINDINGS OFF CACHE BOOL "" FORCE)
 set(OPENDAQ_GENERATE_PYTHON_BINDINGS ON CACHE BOOL "")
@@ -40,7 +51,6 @@ set(OPENDAQ_ENABLE_OPTIONAL_TESTS ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BO
 set(OPENDAQ_ENABLE_COVERAGE OFF CACHE BOOL "" FORCE)
 set(OPENDAQ_ENABLE_REGRESSION_TESTS ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BOOL "" FORCE)
 set(OPENDAQ_ENABLE_UNSTABLE_TEST_LABELS ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BOOL "" FORCE)
-
 
 set(DAQMODULES_EMPTY_MODULE ON CACHE BOOL "")
 set(DAQMODULES_OPENDAQ_CLIENT_MODULE ON CACHE BOOL "")
@@ -61,17 +71,17 @@ set(OPENDAQ_ENABLE_PYTHON_BINDINGS_TESTS OFF CACHE BOOL "" FORCE)
 set(APP_ENABLE_WEBPAGE_EXAMPLES OFF CACHE BOOL "")
 
 FetchContent_MakeAvailable(opendaq)
+include("${opendaq_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
 
 if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
-opendaq_get_custom_fetch_content_params(OpcUaModules FC_PARAMS)
 FetchContent_Declare(
-	OpcUaModules
-	GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
-	GIT_TAG        generic-client
-	GIT_PROGRESS   ON
-	GIT_SHALLOW    OFF
-	GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
-	${FC_PARAMS}
+    opcuamodules
+    GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
+    GIT_TAG        main
+    GIT_PROGRESS   ON
+    GIT_SHALLOW    OFF
+    SOURCE_SUBDIR  "INVALID"
+    GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
 )
 
 set(DAQMODULES_OPCUA_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
@@ -80,39 +90,39 @@ set(DAQMODULES_OPCUA_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_OPCUA_ENABLE_SERVER ON CACHE BOOL "")
 set(DAQMODULES_OPCUA_ENABLE_GENERIC_CLIENT ON CACHE BOOL "")
 
-FetchContent_MakeAvailable(OpcUaModules)
+FetchContent_MakeAvailable(opcuamodules)
+include("${opcuamodules_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
 endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_MQTT_MODULE)
-opendaq_get_custom_fetch_content_params(MqttModule FC_PARAMS)
 FetchContent_Declare(
-	MqttModule
-	GIT_REPOSITORY https://github.com/openDAQ/MQTTStreamingModule.git
-	GIT_TAG        main
-	GIT_PROGRESS   ON
-	GIT_SHALLOW    OFF
-	GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
-	${FC_PARAMS}
+    mqttmodule
+    GIT_REPOSITORY https://github.com/openDAQ/MQTTStreamingModule.git
+    GIT_TAG        main
+    GIT_PROGRESS   ON
+    GIT_SHALLOW    OFF
+    SOURCE_SUBDIR  "INVALID"
+    GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
 )
 
 set(DAQMODULES_MQTT_ENABLE_TESTS ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BOOL "" FORCE)
 set(DAQMODULES_MQTT_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_MQTT_ENABLE_SSL OFF CACHE BOOL "")
 
-FetchContent_MakeAvailable(MqttModule)
+FetchContent_MakeAvailable(mqttmodule)
+include("${mqttmodule_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
 endif()
 
 
 if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
-opendaq_get_custom_fetch_content_params(LtStreamingModulesModern FC_PARAMS)
 FetchContent_Declare(
-    LtStreamingModulesModern
+    ltstreamingmodulesmodern
     GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesModern.git
-    GIT_TAG        4336b3cf6eacf70b3b5c720523c2de7a5e0a5cf5
+    GIT_TAG        main
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
+    SOURCE_SUBDIR  "INVALID"
     GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
-    ${FC_PARAMS}
 )
 
 set(DAQMODULES_LT_STREAMING_ENABLE_TESTS  ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BOOL "" FORCE)
@@ -120,19 +130,19 @@ set(DAQMODULES_LT_STREAMING_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_SERVER ON CACHE BOOL "")
 
-FetchContent_MakeAvailable(LtStreamingModulesModern)
-endif()       
+FetchContent_MakeAvailable(ltstreamingmodulesmodern)
+include("${ltstreamingmodulesmodern_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
+endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
-opendaq_get_custom_fetch_content_params(AsamCmpModules FC_PARAMS)
 FetchContent_Declare(
-    AsamCmpModules
+    asamcmpmodules
     GIT_REPOSITORY https://github.com/openDAQ/ASAM-CMP-Modules.git
     GIT_TAG        main
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
+    SOURCE_SUBDIR  "INVALID"
     GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
-    ${FC_PARAMS}
 )
 
 set(ASAM_CMP_ENABLE_TESTS  ${${REPO_OPTION_PREFIX}_ENABLE_TESTS} CACHE BOOL "" FORCE)
@@ -140,6 +150,13 @@ set(ASAM_CMP_ENABLE_EXAMPLE OFF CACHE BOOL "")
 set(ASAM_CMP_BUILD_DATA_SINK ON CACHE BOOL "")
 set(ASAM_CMP_BUILD_CAPTURE_MODULE ON CACHE BOOL "")
 
-FetchContent_MakeAvailable(AsamCmpModules)
-endif() 
-        
+FetchContent_MakeAvailable(asamcmpmodules)
+include("${asamcmpmodules_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
+endif()
+
+# add the subdirectories for the core and modules
+add_subdirectory(${opendaq_SOURCE_DIR} ${opendaq_BINARY_DIR})
+add_subdirectory(${opcuamodules_SOURCE_DIR} ${opcuamodules_BINARY_DIR})
+add_subdirectory(${mqttmodule_SOURCE_DIR} ${mqttmodule_BINARY_DIR})
+add_subdirectory(${ltstreamingmodulesmodern_SOURCE_DIR} ${ltstreamingmodulesmodern_BINARY_DIR})
+add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
