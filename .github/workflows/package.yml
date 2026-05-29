@@ -141,11 +141,13 @@ jobs:
                   "configuration": e.get("build-type") or "Release",
               })
               if e.get("cpack-generator"):
+                  # No packageDirectory: cpack --preset doesn't reliably honor it (the value
+                  # baked into CPackConfig.cmake wins), so packages land in the build dir
+                  # (build/output) by CPack default. The upload step reads from there.
                   presets["packagePresets"].append({
                       "name": name, "configurePreset": name,
                       "generators": [e["cpack-generator"]],
                       "configurations": [e.get("build-type") or "Release"],
-                      "packageDirectory": "${sourceDir}/" + build_dir + "/_packages",
                   })
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -233,5 +235,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: build/output/_packages/*.${{ matrix.package-ext }}
+          path: |
+            build/output/*.${{ matrix.package-ext }}
+            build/output/_packages/*.${{ matrix.package-ext }}
           if-no-files-found: error
