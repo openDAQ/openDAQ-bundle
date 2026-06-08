@@ -163,3 +163,13 @@ add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
 
 # Re-apply openDAQ's CPack config; ASAM-CMP-Modules' include(CPack) overrides it otherwise.
 include("${opendaq_SOURCE_DIR}/cmake/Packing.cmake")
+
+if(WIN32)
+    # Packing.cmake pointed NSIS icons at ${CMAKE_CURRENT_SOURCE_DIR}/media/ (= bundle, no
+    # such dir). Repoint at openDAQ's media and re-finalize CPack so makensis can find them.
+    set(CPACK_NSIS_MUI_ICON "${opendaq_SOURCE_DIR}/media/opendaq.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${opendaq_SOURCE_DIR}\\media\\opendaq.ico")
+    set(CPACK_NSIS_MUI_HEADERIMAGE "${opendaq_SOURCE_DIR}\\media\\nsis_header.bmp")
+    set(CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP "${opendaq_SOURCE_DIR}\\media\\nsis_welcome.bmp")
+    include(CPack)
+endif()
