@@ -30,7 +30,7 @@ FetchContent_MakeAvailable(opendaq-cmake-utils)
 FetchContent_Declare(
     opendaq
     GIT_REPOSITORY https://github.com/openDAQ/openDAQ.git
-    GIT_TAG main
+    GIT_TAG        v3.40.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -77,7 +77,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
 FetchContent_Declare(
     opcuamodules
     GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
-    GIT_TAG        main
+    GIT_TAG        v4.0.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -98,7 +98,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_MQTT_MODULE)
 FetchContent_Declare(
     mqttmodule
     GIT_REPOSITORY https://github.com/openDAQ/MQTTStreamingModule.git
-    GIT_TAG        main
+    GIT_TAG        v0.2.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -118,7 +118,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
 FetchContent_Declare(
     ltstreamingmodulesmodern
     GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesModern.git
-    GIT_TAG        main
+    GIT_TAG        v4.0.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -138,7 +138,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
 FetchContent_Declare(
     asamcmpmodules
     GIT_REPOSITORY https://github.com/openDAQ/ASAM-CMP-Modules.git
-    GIT_TAG        main
+    GIT_TAG        v1.2.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -160,3 +160,6 @@ add_subdirectory(${opcuamodules_SOURCE_DIR} ${opcuamodules_BINARY_DIR})
 add_subdirectory(${mqttmodule_SOURCE_DIR} ${mqttmodule_BINARY_DIR})
 add_subdirectory(${ltstreamingmodulesmodern_SOURCE_DIR} ${ltstreamingmodulesmodern_BINARY_DIR})
 add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
+
+# Re-apply openDAQ's CPack config; ASAM-CMP-Modules' include(CPack) overrides it otherwise.
+include("${opendaq_SOURCE_DIR}/cmake/Packing.cmake")

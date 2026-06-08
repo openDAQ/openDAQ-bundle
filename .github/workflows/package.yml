@@ -18,6 +18,7 @@ jobs:
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       cmake-user-presets: ${{ steps.presets.outputs.cmake-user-presets }}
+      build-dir: ${{ steps.presets.outputs.build-dir }}
     steps:
       - name: Generate matrix
         id: matrix
@@ -152,6 +153,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"cmake-user-presets={json.dumps(presets)}\n")
+              f.write(f"build-dir={build_dir}\n")
 
           print(json.dumps(presets, indent=2))
 
@@ -228,6 +230,17 @@ jobs:
       - name: Build
         run: cmake --build --preset ${{ matrix.name }}
 
+      - name: Stage install
+        shell: bash
+        run: cmake --install "${{ needs.generate.outputs.build-dir }}" --prefix "${{ github.workspace }}/staging" --config "${{ matrix.build-type }}"
+
+      - name: Upload staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-staging
+          path: staging/
+          if-no-files-found: error
+
       - name: Package
         run: cpack --preset ${{ matrix.name }}
 
@@ -236,6 +249,9 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: |
-            build/output/*.${{ matrix.package-ext }}
+            build/_packages/*.${{ matrix.package-ext }}
             build/output/_packages/*.${{ matrix.package-ext }}
+            build/output/package/*.${{ matrix.package-ext }}
+            build/output/*.${{ matrix.package-ext }}
           if-no-files-found: error
+
