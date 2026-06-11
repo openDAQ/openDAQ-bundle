@@ -77,7 +77,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
 FetchContent_Declare(
     opcuamodules
     GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
-    GIT_TAG        v4.0.0
+    GIT_TAG        v4.0.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
