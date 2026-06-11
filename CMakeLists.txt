@@ -116,8 +116,8 @@ endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
 FetchContent_Declare(
-    ltstreamingmodulesmodern
-    GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesModern.git
+    ltstreamingmoduleslegacy
+    GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesLegacy.git
     GIT_TAG        v4.0.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
@@ -130,8 +130,8 @@ set(DAQMODULES_LT_STREAMING_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_SERVER ON CACHE BOOL "")
 
-FetchContent_MakeAvailable(ltstreamingmodulesmodern)
-include("${ltstreamingmodulesmodern_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
+FetchContent_MakeAvailable(ltstreamingmoduleslegacy)
+include("${ltstreamingmoduleslegacy_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
 endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
@@ -158,7 +158,7 @@ endif()
 add_subdirectory(${opendaq_SOURCE_DIR} ${opendaq_BINARY_DIR})
 add_subdirectory(${opcuamodules_SOURCE_DIR} ${opcuamodules_BINARY_DIR})
 add_subdirectory(${mqttmodule_SOURCE_DIR} ${mqttmodule_BINARY_DIR})
-add_subdirectory(${ltstreamingmodulesmodern_SOURCE_DIR} ${ltstreamingmodulesmodern_BINARY_DIR})
+add_subdirectory(${ltstreamingmoduleslegacy_SOURCE_DIR} ${ltstreamingmoduleslegacy_BINARY_DIR})
 add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
 
 # Re-apply openDAQ's CPack config; ASAM-CMP-Modules' include(CPack) overrides it otherwise.
