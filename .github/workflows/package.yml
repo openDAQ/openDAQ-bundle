@@ -71,12 +71,12 @@ jobs:
           }
 
           jobs_cfg = {
-              # "windows-2022-x86_64-msvs-v143-nsis-release":   {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe"},
-              # "windows-2022-x86-msvs-v143-nsis-release":      {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe", "architecture": "Win32"},
+              "windows-2022-x86_64-msvs-v143-nsis-release":   {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe"},
+              "windows-2022-x86-msvs-v143-nsis-release":      {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe", "architecture": "Win32"},
               "ubuntu-22.04-x86_64-ninja-gcc-deb-release":    {**_linux,   "cc": "gcc",            "cxx": "g++",                "build-type": "Release", "cpack-generator": "DEB",          "package-ext": "deb", "runner": "ubuntu-latest"},
               "ubuntu-22.04-armv8-ninja-gcc-deb-release":     {**_linux,   "cc": "gcc",            "cxx": "g++",                "build-type": "Release", "cpack-generator": "DEB",          "package-ext": "deb", "runner": "ubuntu-24.04-arm"},
-              # "macos-26-x86_64-ninja-appleclang-pkg-release": {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26-intel"},
-              # "macos-26-armv8-ninja-appleclang-pkg-release":  {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26"},
+              "macos-26-x86_64-ninja-appleclang-pkg-release": {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26-intel"},
+              "macos-26-armv8-ninja-appleclang-pkg-release":  {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26"},
           }
 
           # --- build matrix with materialized install commands ---
