@@ -38,6 +38,11 @@ jobs:
               "cache-variables": {
                   "OPENDAQ_GENERATE_PYTHON_BINDINGS": "OFF",
                   "OPENDAQ_GENERATE_CSHARP_BINDINGS": "OFF",
+                  # ASAM-CMP v1.2.1 release: build core + ASAM-CMP only.
+                  "RELEASE_REPO_ENABLE_OPCUA_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_MQTT_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_LT_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_ASAM_CMP_MODULE": "ON",
               },
               "apt-install": [], "brew-install": [], "choco-install": [],
           }

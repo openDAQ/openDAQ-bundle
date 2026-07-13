@@ -30,7 +30,7 @@ FetchContent_MakeAvailable(opendaq-cmake-utils)
 FetchContent_Declare(
     opendaq
     GIT_REPOSITORY https://github.com/openDAQ/openDAQ.git
-    GIT_TAG        v3.40.0
+    GIT_TAG        v3.40.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -138,7 +138,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
 FetchContent_Declare(
     asamcmpmodules
     GIT_REPOSITORY https://github.com/openDAQ/ASAM-CMP-Modules.git
-    GIT_TAG        v1.2.0
+    GIT_TAG        v1.2.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -156,10 +156,22 @@ endif()
 
 # add the subdirectories for the core and modules
 add_subdirectory(${opendaq_SOURCE_DIR} ${opendaq_BINARY_DIR})
+
+if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
 add_subdirectory(${opcuamodules_SOURCE_DIR} ${opcuamodules_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_MQTT_MODULE)
 add_subdirectory(${mqttmodule_SOURCE_DIR} ${mqttmodule_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
 add_subdirectory(${ltstreamingmoduleslegacy_SOURCE_DIR} ${ltstreamingmoduleslegacy_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
 add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
+endif()
 
 # Re-apply openDAQ's CPack config; ASAM-CMP-Modules' include(CPack) overrides it otherwise.
 include("${opendaq_SOURCE_DIR}/cmake/Packing.cmake")
