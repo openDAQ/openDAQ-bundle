@@ -30,7 +30,7 @@ FetchContent_MakeAvailable(opendaq-cmake-utils)
 FetchContent_Declare(
     opendaq
     GIT_REPOSITORY https://github.com/openDAQ/openDAQ.git
-    GIT_TAG main
+    GIT_TAG        v3.40.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -77,7 +77,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
 FetchContent_Declare(
     opcuamodules
     GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
-    GIT_TAG        main
+    GIT_TAG        v4.0.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -98,7 +98,7 @@ if (${REPO_OPTION_PREFIX}_ENABLE_MQTT_MODULE)
 FetchContent_Declare(
     mqttmodule
     GIT_REPOSITORY https://github.com/openDAQ/MQTTStreamingModule.git
-    GIT_TAG        main
+    GIT_TAG        v0.2.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -116,9 +116,9 @@ endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
 FetchContent_Declare(
-    ltstreamingmodulesmodern
-    GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesModern.git
-    GIT_TAG        main
+    ltstreamingmoduleslegacy
+    GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesLegacy.git
+    GIT_TAG        v4.0.0
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -130,15 +130,15 @@ set(DAQMODULES_LT_STREAMING_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_SERVER ON CACHE BOOL "")
 
-FetchContent_MakeAvailable(ltstreamingmodulesmodern)
-include("${ltstreamingmodulesmodern_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
+FetchContent_MakeAvailable(ltstreamingmoduleslegacy)
+include("${ltstreamingmoduleslegacy_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
 endif()
 
 if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
 FetchContent_Declare(
     asamcmpmodules
     GIT_REPOSITORY https://github.com/openDAQ/ASAM-CMP-Modules.git
-    GIT_TAG        main
+    GIT_TAG        v1.2.1
     GIT_PROGRESS   ON
     GIT_SHALLOW    OFF
     SOURCE_SUBDIR  "INVALID"
@@ -156,7 +156,32 @@ endif()
 
 # add the subdirectories for the core and modules
 add_subdirectory(${opendaq_SOURCE_DIR} ${opendaq_BINARY_DIR})
+
+if (${REPO_OPTION_PREFIX}_ENABLE_OPCUA_MODULE)
 add_subdirectory(${opcuamodules_SOURCE_DIR} ${opcuamodules_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_MQTT_MODULE)
 add_subdirectory(${mqttmodule_SOURCE_DIR} ${mqttmodule_BINARY_DIR})
-add_subdirectory(${ltstreamingmodulesmodern_SOURCE_DIR} ${ltstreamingmodulesmodern_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_LT_MODULE)
+add_subdirectory(${ltstreamingmoduleslegacy_SOURCE_DIR} ${ltstreamingmoduleslegacy_BINARY_DIR})
+endif()
+
+if (${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE)
 add_subdirectory(${asamcmpmodules_SOURCE_DIR} ${asamcmpmodules_BINARY_DIR})
+endif()
+
+# Re-apply openDAQ's CPack config; ASAM-CMP-Modules' include(CPack) overrides it otherwise.
+include("${opendaq_SOURCE_DIR}/cmake/Packing.cmake")
+
+if(WIN32)
+    # Packing.cmake pointed NSIS icons at ${CMAKE_CURRENT_SOURCE_DIR}/media/ (= bundle, no
+    # such dir). Repoint at openDAQ's media and re-finalize CPack so makensis can find them.
+    set(CPACK_NSIS_MUI_ICON "${opendaq_SOURCE_DIR}/media/opendaq.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${opendaq_SOURCE_DIR}\\media\\opendaq.ico")
+    set(CPACK_NSIS_MUI_HEADERIMAGE "${opendaq_SOURCE_DIR}\\media\\nsis_header.bmp")
+    set(CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP "${opendaq_SOURCE_DIR}\\media\\nsis_welcome.bmp")
+    include(CPack)
+endif()

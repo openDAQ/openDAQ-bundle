@@ -39,6 +39,18 @@
             "generator": "Ninja"
         },
         {
+            "name": "apple",
+            "hidden": true,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
+            }
+        },
+        {
             "name": "msvc-17",
             "hidden": true,
             "generator": "Visual Studio 15 2017",
@@ -161,6 +173,26 @@
                 "release",
                 "clang",
                 "ninja"
+            ]
+        },
+        {
+            "name": "macos/clang/debug",
+            "displayName": "[Clang] Debug - macOS",
+            "inherits": [
+                "debug",
+                "clang",
+                "ninja",
+                "apple"
+            ]
+        },
+        {
+            "name": "macos/clang/release",
+            "displayName": "[Clang] Release - macOS",
+            "inherits": [
+                "release",
+                "clang",
+                "ninja",
+                "apple"
             ]
         }
     ]

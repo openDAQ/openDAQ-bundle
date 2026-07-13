@@ -1,0 +1,262 @@
+name: Build openDAQ bundle packages
+
+on:
+  push:
+    branches: [main, release/**]
+  pull_request:
+    branches: [main, release/**]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    name: Generate
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      cmake-user-presets: ${{ steps.presets.outputs.cmake-user-presets }}
+      build-dir: ${{ steps.presets.outputs.build-dir }}
+    steps:
+      - name: Generate matrix
+        id: matrix
+        shell: python3 {0}
+        run: |
+          import json, os
+
+          # --- base / platform configs (dict-spread inheritance) ---
+
+          _base = {
+              "runner": None, "image": "", "bootstrap": "",
+              "generator": None, "architecture": "",
+              "cc": "", "cxx": "", "toolset": "", "build-type": "",
+              "cpack-generator": "", "package-ext": "",
+              # Bindings ship as separate artifacts (openDAQ's package.yml); keep them out of
+              # the bundle installers. Disabled in CI via cache-variables, not forced in CMakeLists.
+              "cache-variables": {
+                  "OPENDAQ_GENERATE_PYTHON_BINDINGS": "OFF",
+                  "OPENDAQ_GENERATE_CSHARP_BINDINGS": "OFF",
+                  # ASAM-CMP v1.2.1 release: build core + ASAM-CMP only.
+                  "RELEASE_REPO_ENABLE_OPCUA_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_MQTT_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_LT_MODULE": "OFF",
+                  "RELEASE_REPO_ENABLE_ASAM_CMP_MODULE": "ON",
+              },
+              "apt-install": [], "brew-install": [], "choco-install": [],
+          }
+
+          _linux = {
+              **_base,
+              "image": "ubuntu:22.04",  # glibc 2.35 for broad .deb compatibility
+              "bootstrap": "apt-get update && apt-get install -y --no-install-recommends ca-certificates git unzip",
+              "generator": "Ninja",
+              "apt-install": [
+                  "build-essential", "lld", "dpkg-dev", "python3",
+                  "mono-runtime", "libmono-system-json-microsoft4.0-cil", "libmono-system-data4.0-cil",
+                  "libx11-dev", "libxi-dev", "libxcursor-dev", "libxrandr-dev",
+                  "libgl-dev", "libudev-dev", "libfreetype6-dev",
+                  "libpcap-dev",  # ASAM-CMP capture module
+              ],
+          }
+
+          _macos = {
+              **_base,
+              "generator": "Ninja",
+              "brew-install": ["mono"],
+              "cache-variables": {**_base["cache-variables"], "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"},
+          }
+
+          _windows = {
+              **_base,
+              "runner": "windows-2022", "generator": "Visual Studio 17 2022",
+              "architecture": "x64",
+              "choco-install": ["nsis"],
+          }
+
+          jobs_cfg = {
+              "windows-2022-x86_64-msvs-v143-nsis-release":   {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe"},
+              "windows-2022-x86-msvs-v143-nsis-release":      {**_windows, "toolset": "v143",                                   "build-type": "Release", "cpack-generator": "NSIS",         "package-ext": "exe", "architecture": "Win32"},
+              "ubuntu-22.04-x86_64-ninja-gcc-deb-release":    {**_linux,   "cc": "gcc",            "cxx": "g++",                "build-type": "Release", "cpack-generator": "DEB",          "package-ext": "deb", "runner": "ubuntu-latest"},
+              "ubuntu-22.04-armv8-ninja-gcc-deb-release":     {**_linux,   "cc": "gcc",            "cxx": "g++",                "build-type": "Release", "cpack-generator": "DEB",          "package-ext": "deb", "runner": "ubuntu-24.04-arm"},
+              "macos-26-x86_64-ninja-appleclang-pkg-release": {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26-intel"},
+              "macos-26-armv8-ninja-appleclang-pkg-release":  {**_macos,   "cc": "/usr/bin/clang", "cxx": "/usr/bin/clang++",   "build-type": "Release", "cpack-generator": "productbuild", "package-ext": "pkg", "runner": "macos-26"},
+          }
+
+          # --- build matrix with materialized install commands ---
+
+          matrix = []
+          for name, cfg in jobs_cfg.items():
+              apt   = cfg.get("apt-install") or []
+              brew  = cfg.get("brew-install") or []
+              choco = cfg.get("choco-install") or []
+              gen   = cfg.get("cpack-generator") or ""
+              matrix.append({
+                  "name": name,
+                  "runner": cfg["runner"],
+                  "image": cfg.get("image") or "",
+                  "bootstrap": cfg.get("bootstrap") or "",
+                  "generator": cfg["generator"],
+                  "architecture": cfg.get("architecture") or "",
+                  "cc": cfg.get("cc") or "",
+                  "cxx": cfg.get("cxx") or "",
+                  "toolset": cfg.get("toolset") or "",
+                  "build-type": cfg.get("build-type") or "Release",
+                  "cache-variables": cfg.get("cache-variables") or {},
+                  "cpack-generator": gen,
+                  "package-ext": cfg.get("package-ext") or "",
+                  "cmd-install-apt":   ("apt-get update && apt-get install -y --no-install-recommends " + " ".join(apt)) if apt else "",
+                  "cmd-install-brew":  ("brew install " + " ".join(brew)) if brew else "",
+                  "cmd-install-choco": ("choco install -y --no-progress " + " ".join(choco)) if choco else "",
+              })
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps({'include': matrix})}\n")
+
+          print(json.dumps({"include": matrix}, indent=2))
+
+      - name: Generate presets
+        id: presets
+        shell: python3 {0}
+        run: |
+          import json, os
+
+          # Read the matrix from the previous step and derive one
+          # configure / build / package preset per job.
+          matrix = json.loads(r"""${{ steps.matrix.outputs.matrix }}""")["include"]
+
+          build_dir = "build/output"
+          presets = {"version": 6, "configurePresets": [], "buildPresets": [], "packagePresets": []}
+          for e in matrix:
+              name = e["name"]
+              cache = dict(e.get("cache-variables") or {})
+              if e.get("build-type"): cache["CMAKE_BUILD_TYPE"] = e["build-type"]
+              if e.get("cc"):         cache["CMAKE_C_COMPILER"] = e["cc"]
+              if e.get("cxx"):        cache["CMAKE_CXX_COMPILER"] = e["cxx"]
+
+              cp = {"name": name, "generator": e["generator"],
+                    "binaryDir": "${sourceDir}/" + build_dir, "cacheVariables": cache}
+              if e.get("architecture"):
+                  cp["architecture"] = e["architecture"]
+              if e.get("toolset"):
+                  cp["toolset"] = e["toolset"]
+              presets["configurePresets"].append(cp)
+              presets["buildPresets"].append({
+                  "name": name, "configurePreset": name,
+                  "configuration": e.get("build-type") or "Release",
+              })
+              if e.get("cpack-generator"):
+                  # No packageDirectory: cpack --preset doesn't reliably honor it (the value
+                  # baked into CPackConfig.cmake wins), so packages land in the build dir
+                  # (build/output) by CPack default. The upload step reads from there.
+                  presets["packagePresets"].append({
+                      "name": name, "configurePreset": name,
+                      "generators": [e["cpack-generator"]],
+                      "configurations": [e.get("build-type") or "Release"],
+                  })
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"cmake-user-presets={json.dumps(presets)}\n")
+              f.write(f"build-dir={build_dir}\n")
+
+          print(json.dumps(presets, indent=2))
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          s() { [ "$1" = "success" ] && echo "✅" || ([ "$1" = "skipped" ] && echo "➖" || echo "❌"); }
+          {
+            echo "<details><summary>$(s ${{ steps.matrix.outcome }}) Matrix (matrix.json)</summary>"
+            echo ""
+            echo '```json'
+            echo '${{ steps.matrix.outputs.matrix }}' | jq . 2>/dev/null || echo "Not generated"
+            echo '```'
+            echo ""
+            echo "</details>"
+            echo ""
+            echo "<details><summary>$(s ${{ steps.presets.outcome }}) Presets (CMakeUserPresets.json)</summary>"
+            echo ""
+            echo '```json'
+            echo '${{ steps.presets.outputs.cmake-user-presets }}' | jq . 2>/dev/null || echo "Not generated"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    needs: generate
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+      env:
+        DEBIAN_FRONTEND: noninteractive
+        TZ: Etc/UTC
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.generate.outputs.matrix) }}
+    steps:
+      - name: Bootstrap
+        if: matrix.bootstrap != ''
+        run: ${{ matrix.bootstrap }}
+
+      - name: Setup Git safe.directory
+        if: matrix.image != ''
+        shell: bash
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/checkout@v4
+
+      - name: Setup CMake & Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Install dependencies (apt)
+        if: matrix.cmd-install-apt != ''
+        run: ${{ matrix.cmd-install-apt }}
+
+      - name: Install dependencies (brew)
+        if: matrix.cmd-install-brew != ''
+        run: ${{ matrix.cmd-install-brew }}
+
+      - name: Install dependencies (choco)
+        if: matrix.cmd-install-choco != ''
+        run: ${{ matrix.cmd-install-choco }}
+
+      - name: Write CMake user presets
+        shell: bash
+        run: echo '${{ needs.generate.outputs.cmake-user-presets }}' > CMakeUserPresets.json
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.name }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.name }}
+
+      - name: Stage install
+        shell: bash
+        run: cmake --install "${{ needs.generate.outputs.build-dir }}" --prefix staging --config "${{ matrix.build-type }}"
+
+      - name: Upload staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-staging
+          path: staging/
+          if-no-files-found: error
+
+      - name: Package
+        run: cpack --preset ${{ matrix.name }}
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            build/_packages/*.${{ matrix.package-ext }}
+            build/output/_packages/*.${{ matrix.package-ext }}
+            build/output/package/*.${{ matrix.package-ext }}
+            build/output/*.${{ matrix.package-ext }}
+          if-no-files-found: error
+
