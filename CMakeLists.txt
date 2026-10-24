@@ -18,14 +18,30 @@ option(${REPO_OPTION_PREFIX}_ENABLE_ASAM_CMP_MODULE "Enable ASAM-CMP modules" ON
 
 include(FetchContent)
 
-# fetch the cmake utilities first, as they are used by the other modules
+# the cmake utilities first: the triplet, Boost, and what the layers built here use; the tag the core takes
 FetchContent_Declare(
     opendaq-cmake-utils
     GIT_REPOSITORY https://github.com/openDAQ/opendaq-cmake-utils.git
-    GIT_TAG        v1.0.1
+    GIT_TAG        v1.1.3
     GIT_PROGRESS   ON
 )
 FetchContent_MakeAvailable(opendaq-cmake-utils)
+
+# The bundle by FetchLayer: the stagings named, from where the policy says; prebuilt only for now, the source
+# build below stays until FetchLayer compiles
+set(BUNDLE_STAGINGS "" CACHE STRING "The stagings to make available, dependencies first; empty: the source build below")
+if (BUNDLE_STAGINGS)
+    include(cmake/FetchLayer.cmake)
+    # the identity keys are the annotations staging-push writes
+    set(FETCHLAYER_IDENTITY_REVISION_KEY   "org.opencontainers.image.revision")
+    set(FETCHLAYER_IDENTITY_DEPENDENCY_KEY "com.opendaq.dependencies.<name>.revision")
+    set(FETCHLAYER_IDENTITY_AXIS_KEY       "com.opendaq.package.<axis>")
+
+    include(cmake/Layers.cmake)
+    FetchLayer_MakeAvailable(${BUNDLE_STAGINGS})
+    include(cmake/Packing.cmake)
+    return()
+endif()
 
 FetchContent_Declare(
     opendaq
