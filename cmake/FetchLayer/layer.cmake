@@ -6,10 +6,12 @@
 ##              stagings is first looked for (__FetchLayer_git_commit)
 ##   ARGUMENTS  the rest, as given — FetchContent's content options; origins parse their own keywords from it
 ##              (GIT_REPOSITORY, …)
+##   POST_FETCH_INCLUDES  scripts of its sources to include once fetched, before any layer is integrated
 ##   STAGINGS   the stagings it gives, as FetchLayer_DeclareStaging adds them
 ##   REQUESTED  those of its stagings FetchLayer_MakeAvailable was asked for
 ##   ORIGIN     where this build's own variants of its stagings come from, decided once for the layer:
 ##              system, all prebuilt, or git, all from its sources (__FetchLayer_policy_layer_origin)
+##   INCLUDED   its POST_FETCH_INCLUDES included, once (compile.cmake)
 ##   COMPILED   its sources added to this build, once (compile.cmake)
 ##   COMPONENTS the install components its sources gave
 ##

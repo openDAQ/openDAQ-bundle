@@ -8,10 +8,35 @@
 ## COMPONENT goes to <staging>_Development. They go to the staging of the layer; a layer whose several stagings
 ## come from its sources would have to split them between them, which is not done yet.
 ##
-## Only this build's own variant is compiled: the policy never sends another one here.
+## Before that, once every staging asked for is fetched, the layer's POST_FETCH_INCLUDES are included
+## (__FetchLayer_compile_post_fetch). Only this build's own variant is compiled: the policy never sends another
+## one here.
 ##
 
 include_guard(GLOBAL)
+
+# __FetchLayer_compile_post_fetch(<variant> <staging>)
+#   Includes the POST_FETCH_INCLUDES of the staging's layer, once for the layer: <SOURCE_DIR> and <BINARY_DIR>
+#   replaced by the layer's directories, OPTIONAL; with <layer>_SOURCE_DIR and _BINARY_DIR set, lower-cased
+function(__FetchLayer_compile_post_fetch VARIANT STAGING)
+    __FetchLayer_staging_get("${STAGING}" LAYER _layer)
+    __FetchLayer_layer_get("${_layer}" INCLUDED _included)
+    if (_included)
+        return()
+    endif()
+    __FetchLayer_layer_set("${_layer}" INCLUDED TRUE)
+    __FetchLayer_layer_get("${_layer}" POST_FETCH_INCLUDES _scripts)
+    __FetchLayer_instance_get("${STAGING}" "${VARIANT}" SOURCE_DIR _source_dir)
+    __FetchLayer_instance_get("${STAGING}" "${VARIANT}" BINARY_DIR _binary_dir)
+    string(TOLOWER "${_layer}" _lower)
+    set(${_lower}_SOURCE_DIR "${_source_dir}")
+    set(${_lower}_BINARY_DIR "${_binary_dir}")
+    foreach(_script IN LISTS _scripts)
+        string(REPLACE "<SOURCE_DIR>" "${_source_dir}" _script "${_script}")
+        string(REPLACE "<BINARY_DIR>" "${_binary_dir}" _script "${_script}")
+        include("${_script}" OPTIONAL)
+    endforeach()
+endfunction()
 
 # __FetchLayer_compile_make_available(<variant> <staging>)
 function(__FetchLayer_compile_make_available VARIANT STAGING)

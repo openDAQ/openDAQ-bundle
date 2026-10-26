@@ -4,7 +4,7 @@
 ## Stagings are made available, for one or more triplets, from where the policy says — prebuilt (System, later
 ## OCI) or built from their layer's sources (Git).
 ##
-##   FetchLayer_Declare(<layer> REVISION <ref> [<FetchContent content options>…])
+##   FetchLayer_Declare(<layer> REVISION <ref> [<FetchContent content options>…] [POST_FETCH_INCLUDES <script>…])
 ##   FetchLayer_DeclareStaging(<staging> LAYER <layer> [AXES <axis>…] [DEPENDS <staging>…] [FIND_PACKAGE_ARGS …])
 ##   FetchLayer_DeclareAxis(<axis> NATIVE <value> [VALUES <value>…])
 ##   FetchLayer_MakeAvailable(<staging>…)
@@ -44,15 +44,20 @@ set(FETCHLAYER_STORE "" CACHE PATH "The store of prebuilt stagings: <store>/<sta
 
 # === FetchLayer_Declare ======================================================================================
 
-# FetchLayer_Declare(<layer> REVISION <ref> [<FetchContent content options>…])
-#   Records the layer; the first declaration of a name wins
+# FetchLayer_Declare(<layer> REVISION <ref> [<FetchContent content options>…] [POST_FETCH_INCLUDES <script>…])
+#   Records the layer; the first declaration of a name wins. POST_FETCH_INCLUDES (last: it takes what follows) are
+#   scripts of the layer's sources, <SOURCE_DIR>/… and <BINARY_DIR>/… standing for its directories: when the layer
+#   comes from its sources, each is included (OPTIONAL: a missing one is skipped) once every staging asked for is
+#   fetched and before any is integrated — so what one layer appends to (a Boost component list) is complete
+#   before another is added. A script sees <layer>_SOURCE_DIR and _BINARY_DIR, lower-cased, as FetchContent's;
+#   not the layer's project variables, its project not having started
 function(FetchLayer_Declare NAME)
     __FetchLayer_layer_get("${NAME}" REVISION _known)
     if (_known)
         return()
     endif()
 
-    cmake_parse_arguments(PARSE_ARGV 1 _arg "" "REVISION" "DEPENDS;FIND_PACKAGE_ARGS")
+    cmake_parse_arguments(PARSE_ARGV 1 _arg "" "REVISION" "DEPENDS;FIND_PACKAGE_ARGS;POST_FETCH_INCLUDES")
     if (NOT _arg_REVISION)
         message(FATAL_ERROR "FetchLayer_Declare(${NAME}): REVISION is required")
     endif()
@@ -61,8 +66,9 @@ function(FetchLayer_Declare NAME)
                             "FetchLayer_DeclareStaging(<staging> LAYER ${NAME} …)")
     endif()
 
-    __FetchLayer_layer_set("${NAME}" REVISION  "${_arg_REVISION}")
-    __FetchLayer_layer_set("${NAME}" ARGUMENTS "${_arg_UNPARSED_ARGUMENTS}")
+    __FetchLayer_layer_set("${NAME}" REVISION            "${_arg_REVISION}")
+    __FetchLayer_layer_set("${NAME}" ARGUMENTS           "${_arg_UNPARSED_ARGUMENTS}")
+    __FetchLayer_layer_set("${NAME}" POST_FETCH_INCLUDES "${_arg_POST_FETCH_INCLUDES}")
 endfunction()
 
 # FetchLayer_DeclareStaging(<staging> LAYER <layer> [AXES <axis>…] [DEPENDS <staging>…] [FIND_PACKAGE_ARGS …])
@@ -165,6 +171,30 @@ function(FetchLayer_MakeAvailable)
         endif()
     endforeach()
 
+    # 1. fetch every variant asked for: find, then populate — a prefix, or sources downloaded
+    foreach(_name IN LISTS ARGN)
+        __FetchLayer_variant_list("${_name}" _variants)
+        foreach(_variant IN LISTS _variants)
+            __FetchLayer_instance_get("${_name}" "${_variant}" FETCHED _fetched)
+            if (NOT _fetched)
+                __FetchLayer_find("${_name}" "${_variant}")
+                __FetchLayer_instance_get("${_name}" "${_variant}" ORIGIN _origin)
+                cmake_language(CALL __FetchLayer_${_origin}_populate "${_name}" "${_variant}")
+                __FetchLayer_instance_set("${_name}" "${_variant}" FETCHED TRUE)
+            endif()
+        endforeach()
+    endforeach()
+
+    # 2. the post-fetch scripts of the layers from sources, before any is integrated
+    foreach(_name IN LISTS ARGN)
+        __FetchLayer_variant_select("${_name}" "" _variant)
+        __FetchLayer_instance_get("${_name}" "${_variant}" SOURCE_DIR _source_dir)
+        if (_source_dir)
+            __FetchLayer_compile_post_fetch("${_variant}" "${_name}")
+        endif()
+    endforeach()
+
+    # 3. integrate, in the order given: a prefix is imported, sources are compiled
     foreach(_name IN LISTS ARGN)
         __FetchLayer_variant_list("${_name}" _variants)
         foreach(_variant IN LISTS _variants)
@@ -172,12 +202,7 @@ function(FetchLayer_MakeAvailable)
             if (_populated)
                 continue()
             endif()
-
-            __FetchLayer_find("${_name}" "${_variant}")
-
             __FetchLayer_instance_get("${_name}" "${_variant}" ORIGIN _origin)
-            cmake_language(CALL __FetchLayer_${_origin}_populate "${_name}" "${_variant}")
-            # integrate: a prefix is imported, sources are compiled
             __FetchLayer_instance_get("${_name}" "${_variant}" PREFIX _prefix)
             __FetchLayer_instance_get("${_name}" "${_variant}" SOURCE_DIR _source_dir)
             if (_prefix)

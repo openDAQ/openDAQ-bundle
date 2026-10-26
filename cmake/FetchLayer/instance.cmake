@@ -12,7 +12,8 @@
 ##   SOURCE_DIR          from source: its sources …                                          populate
 ##   BINARY_DIR          … and their build tree                                              populate
 ##   INSTALL_COMPONENTS  its install components, <staging>_Runtime / _Development            integration
-##   POPULATED           made available                                                      MakeAvailable
+##   FETCHED             found and brought, not integrated yet                               MakeAvailable
+##   POPULATED           made available: integrated                                          MakeAvailable
 ##
 ## FetchLayer_GetProperties copies every field into <staging>_<FIELD>.
 ##
@@ -20,7 +21,7 @@
 include_guard(GLOBAL)
 
 set(_FETCHLAYER_INSTANCE_FIELDS
-    POPULATED ORIGIN REF PREFIX SOURCE_DIR BINARY_DIR REVISION DEPENDS_REVISIONS VARIANT IDENTITY_MATCH INSTALL_COMPONENTS)
+    FETCHED POPULATED ORIGIN REF PREFIX SOURCE_DIR BINARY_DIR REVISION DEPENDS_REVISIONS VARIANT IDENTITY_MATCH INSTALL_COMPONENTS)
 
 # __FetchLayer_instance_property(<staging> <variant> <field> <out>)
 #   The name of the global property that holds <field> of the staging <staging> for <variant>

@@ -4,7 +4,7 @@
 ## layer compiles here.
 ##
 ## From the cache (a preset or -D): the revisions, one per layer, BUNDLE_REVISION_<LAYER>, the name upper-cased —
-## a full sha, a tag or a branch; and each axis's values, BUNDLE_AXIS_<AXIS>, and its own value where it can be
+## a full sha, a tag or a branch, main by default; and each axis's values, BUNDLE_AXIS_<AXIS>, and its own value where it can be
 ## given, BUNDLE_<AXIS>.
 ##
 
@@ -31,7 +31,7 @@ FetchLayer_DeclareAxis(
 
 foreach(_layer openDAQ OpcUaModules MQTTStreamingModule LTStreamingModulesModern ASAM-CMP-Modules)
     string(TOUPPER "${_layer}" _upper)
-    set(BUNDLE_REVISION_${_upper} "" CACHE STRING "The revision of ${_layer} in the bundle: a full sha, a tag or a branch")
+    set(BUNDLE_REVISION_${_upper} "main" CACHE STRING "The revision of ${_layer} in the bundle: a full sha, a tag or a branch")
 endforeach()
 
 
@@ -39,8 +39,9 @@ endforeach()
 
 FetchLayer_Declare(
     openDAQ
-    REVISION       "${BUNDLE_REVISION_OPENDAQ}"
-    GIT_REPOSITORY https://github.com/openDAQ/openDAQ.git
+    REVISION            "${BUNDLE_REVISION_OPENDAQ}"
+    GIT_REPOSITORY      https://github.com/openDAQ/openDAQ.git
+    POST_FETCH_INCLUDES <SOURCE_DIR>/external/boost/Boost.cmake
 )
 FetchLayer_DeclareStaging(
     opendaq
@@ -55,9 +56,20 @@ set(OPENDAQ_GENERATE_CSHARP_BINDINGS ON CACHE BOOL "")
 set(OPENDAQ_GENERATE_C_BINDINGS ON CACHE BOOL "")
 set(OPENDAQ_ENABLE_NATIVE_STREAMING ON CACHE BOOL "")
 set(OPENDAQ_ENABLE_WEBSOCKET_STREAMING OFF CACHE BOOL "")
-set(OPENDAQ_ENABLE_TESTS OFF CACHE BOOL "")
+set(OPENDAQ_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
 set(OPENDAQ_DOCUMENTATION_TESTS OFF CACHE BOOL "")
 set(APP_ENABLE_WEBPAGE_EXAMPLES OFF CACHE BOOL "")
+# the core's own modules, as main had them; built only when the core comes from sources — its staging has none,
+# they are to be a staging of their own (opendaq-modules)
+set(DAQMODULES_EMPTY_MODULE ON CACHE BOOL "")
+set(DAQMODULES_OPENDAQ_CLIENT_MODULE ON CACHE BOOL "")
+set(DAQMODULES_OPENDAQ_SERVER_MODULE ON CACHE BOOL "")
+set(DAQMODULES_REF_DEVICE_MODULE ON CACHE BOOL "")
+set(DAQMODULES_SIMULATOR_DEVICE_MODULE ON CACHE BOOL "")
+set(DAQMODULES_REF_FB_MODULE ON CACHE BOOL "")
+set(DAQMODULES_AUDIO_DEVICE_MODULE ON CACHE BOOL "")
+set(DAQMODULES_BASIC_CSV_RECORDER_MODULE ON CACHE BOOL "")
+set(DAQMODULES_LICENSING_MODULE ON CACHE BOOL "")
 set(DAQMODULES_PARQUET_RECORDER_MODULE OFF CACHE BOOL "")
 
 
@@ -65,8 +77,9 @@ set(DAQMODULES_PARQUET_RECORDER_MODULE OFF CACHE BOOL "")
 
 FetchLayer_Declare(
     OpcUaModules
-    REVISION       "${BUNDLE_REVISION_OPCUAMODULES}"
-    GIT_REPOSITORY https://github.com/openDAQ/OpcUaModules.git
+    REVISION            "${BUNDLE_REVISION_OPCUAMODULES}"
+    GIT_REPOSITORY      https://github.com/openDAQ/OpcUaModules.git
+    POST_FETCH_INCLUDES <SOURCE_DIR>/external/boost/Boost.cmake
 )
 FetchLayer_DeclareStaging(
     opcua-modules
@@ -74,6 +87,7 @@ FetchLayer_DeclareStaging(
     DEPENDS opendaq
 )
 
+set(DAQMODULES_OPCUA_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
 set(DAQMODULES_OPCUA_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_OPCUA_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_OPCUA_ENABLE_SERVER ON CACHE BOOL "")
@@ -81,8 +95,9 @@ set(DAQMODULES_OPCUA_ENABLE_GENERIC_CLIENT ON CACHE BOOL "")
 
 FetchLayer_Declare(
     MQTTStreamingModule
-    REVISION       "${BUNDLE_REVISION_MQTTSTREAMINGMODULE}"
-    GIT_REPOSITORY https://github.com/openDAQ/MQTTStreamingModule.git
+    REVISION            "${BUNDLE_REVISION_MQTTSTREAMINGMODULE}"
+    GIT_REPOSITORY      https://github.com/openDAQ/MQTTStreamingModule.git
+    POST_FETCH_INCLUDES <SOURCE_DIR>/external/boost/Boost.cmake
 )
 FetchLayer_DeclareStaging(
     mqtt-module
@@ -90,13 +105,15 @@ FetchLayer_DeclareStaging(
     DEPENDS opendaq
 )
 
+set(DAQMODULES_MQTT_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
 set(DAQMODULES_MQTT_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_MQTT_ENABLE_SSL OFF CACHE BOOL "")
 
 FetchLayer_Declare(
     LTStreamingModulesModern
-    REVISION       "${BUNDLE_REVISION_LTSTREAMINGMODULESMODERN}"
-    GIT_REPOSITORY https://github.com/openDAQ/LTStreamingModulesModern.git
+    REVISION            "${BUNDLE_REVISION_LTSTREAMINGMODULESMODERN}"
+    GIT_REPOSITORY      https://github.com/openDAQ/LTStreamingModulesModern.git
+    POST_FETCH_INCLUDES <SOURCE_DIR>/external/boost/Boost.cmake
 )
 FetchLayer_DeclareStaging(
     lt-streaming-modules
@@ -104,14 +121,16 @@ FetchLayer_DeclareStaging(
     DEPENDS opendaq
 )
 
+set(DAQMODULES_LT_STREAMING_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_CLIENT ON CACHE BOOL "")
 set(DAQMODULES_LT_STREAMING_ENABLE_SERVER ON CACHE BOOL "")
 
 FetchLayer_Declare(
     ASAM-CMP-Modules
-    REVISION       "${BUNDLE_REVISION_ASAM-CMP-MODULES}"
-    GIT_REPOSITORY https://github.com/openDAQ/ASAM-CMP-Modules.git
+    REVISION            "${BUNDLE_REVISION_ASAM-CMP-MODULES}"
+    GIT_REPOSITORY      https://github.com/openDAQ/ASAM-CMP-Modules.git
+    POST_FETCH_INCLUDES <SOURCE_DIR>/external/boost/Boost.cmake
 )
 FetchLayer_DeclareStaging(
     asam-cmp-modules
@@ -119,6 +138,7 @@ FetchLayer_DeclareStaging(
     DEPENDS opendaq
 )
 
+set(ASAM_CMP_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
 set(ASAM_CMP_ENABLE_EXAMPLE OFF CACHE BOOL "")
 set(ASAM_CMP_BUILD_DATA_SINK ON CACHE BOOL "")
 set(ASAM_CMP_BUILD_CAPTURE_MODULE ON CACHE BOOL "")
