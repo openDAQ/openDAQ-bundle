@@ -10,6 +10,7 @@
 ##
 
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/axis.cmake")    # what an axis is named
 
 # __FetchLayer_variant_format(<out> <axis>=<value>…)
 #   The variant with these values, written as one string; a pair not <axis>=<value>, or an axis given twice, is
