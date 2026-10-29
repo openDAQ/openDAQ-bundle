@@ -1,6 +1,6 @@
 ##
 ## A smoke check of an installed bundle: built against an installed prefix (an installer's, or one unpacked),
-## not against the build tree. The C++ API loads every module of the prefix; the C binding is called.
+## not against the build tree. The C++ API and the C binding each load every module of the prefix.
 ##
 ##   cmake -S tests/installed -B build/installed [-DOPENDAQ_PREFIX=/opt/opendaq] [-DEXPECT_MODULES=14]
 ##   cmake --build build/installed && ctest --test-dir build/installed --output-on-failure
@@ -29,9 +29,10 @@ if (EXPECT_MODULES)
 endif()
 target_compile_definitions(modules PRIVATE MODULES_DIR="${_modules}" EXPECT_MODULES=${_expect})
 
-# the C binding: a call through copendaq
+# the C binding: the same, through copendaq
 add_executable(c_binding c_binding.c)
 target_link_libraries(c_binding PRIVATE daq::copendaq)
+target_compile_definitions(c_binding PRIVATE MODULES_DIR="${_modules}" EXPECT_MODULES=${_expect})
 
 set_target_properties(modules c_binding PROPERTIES BUILD_RPATH "${OPENDAQ_PREFIX}/lib")
 
