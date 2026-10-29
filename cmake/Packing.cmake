@@ -46,6 +46,8 @@ set(CPACK_PACKAGE_HOMEPAGE_URL "https://opendaq.io/")
 set(CPACK_PACKAGE_CONTACT "info@opendaq.io")
 set(CPACK_PACKAGE_VERSION "${BUNDLE_VERSION}")
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
+# a macOS package's receipts, io.opendaq.bundle.<component>; by default from the vendor, with its spaces and dots
+set(CPACK_PRODUCTBUILD_IDENTIFIER "io.opendaq.bundle")
 
 set(CPACK_GENERATOR TGZ)
 set(CPACK_VERBATIM_VARIABLES ON)
@@ -65,6 +67,13 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "opt/opendaq/lib")
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/PackingProject.cmake")
 
 include(CPack)
+
+# macOS has no uninstall: the package brings a script that removes its files by its receipts, a component of the
+# bundle's own, which PackingProject.cmake adds to a productbuild package
+if (APPLE)
+    install(PROGRAMS "${CMAKE_CURRENT_LIST_DIR}/macos/uninstall-opendaq-bundle.sh" DESTINATION bin COMPONENT bundle_Runtime)
+    cpack_add_component(bundle_Runtime DISPLAY_NAME "uninstall script" REQUIRED)
+endif()
 
 # an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
 # the rest required. A prebuilt staging's module is <staging>_<module>_Runtime (FetchLayer/import.cmake); a layer
