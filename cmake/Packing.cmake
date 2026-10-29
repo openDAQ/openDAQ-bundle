@@ -65,3 +65,21 @@ set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "opt/opendaq/lib")
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/PackingProject.cmake")
 
 include(CPack)
+
+# an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
+# the rest required. A prebuilt staging's module is <staging>_<module>_Runtime (FetchLayer/import.cmake); a layer
+# built here has no choices of its own, all its components required
+cpack_add_component_group(modules DISPLAY_NAME "Modules" DESCRIPTION "openDAQ modules" EXPANDED)
+foreach(_staging IN LISTS BUNDLE_STAGINGS)
+    string(TOLOWER "${_staging}" _name)
+    string(MAKE_C_IDENTIFIER "${_name}" _c)
+    foreach(_component IN LISTS ${_name}_INSTALL_COMPONENTS)
+        if (_component MATCHES "^${_c}_(.+)_Runtime$")
+            cpack_add_component(${_component} DISPLAY_NAME "${CMAKE_MATCH_1}" GROUP modules)
+        elseif (_component MATCHES "_Runtime$")
+            cpack_add_component(${_component} DISPLAY_NAME "${_name} runtime" REQUIRED)
+        else()
+            cpack_add_component(${_component} DISPLAY_NAME "${_name} development" REQUIRED)
+        endif()
+    endforeach()
+endforeach()

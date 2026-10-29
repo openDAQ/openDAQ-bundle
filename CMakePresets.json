@@ -210,6 +210,16 @@
             }
         },
         {
+            "name": "installer",
+            "displayName": "The core with the modules, the modules optional where the generator offers choices (-G DEB, NSIS, productbuild)",
+            "configurePreset": "bundle-native",
+            "variables": {
+                "BUNDLE_PACK_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "BUNDLE_PACK_COMPONENTS": "Runtime;Development",
+                "CPACK_OPENDAQ_META_PACKAGE_NAME": "opendaq-bundle"
+            }
+        },
+        {
             "name": "modules",
             "displayName": "The modules, without the core",
             "configurePreset": "bundle-native",
