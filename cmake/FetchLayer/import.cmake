@@ -2,8 +2,8 @@
 ## The strategy import: a prefix made available to this build.
 ##
 ## For this build's own variant, the prefix is installed under the staging's install components: each module
-## (a file in lib/modules or bin/modules) under one of its own, <staging>_<module>_Runtime, so an installer can
-## offer it apart; other shared libraries under <staging>_Runtime; the rest — headers, CMake configs, static
+## (a *.module.* file in lib/modules or bin/modules) under one of its own, <module>_Runtime, so an installer can offer it
+## apart (no staging in the name: NSIS makes variables of component names, 60 characters at most); other shared libraries under <staging>_Runtime; the rest — headers, CMake configs, static
 ## and import libraries — under <staging>_Development. When the prefix holds the staging's CMake package, it is
 ## found from the prefix only (find_package … GLOBAL), so its targets exist. Each module file becomes an
 ## imported MODULE target, <staging>::<module>.
@@ -37,8 +37,8 @@ function(__FetchLayer_import_make_available VARIANT)
         string(MAKE_C_IDENTIFIER "${_name}" _c)
         set(_components)
 
-        # the prefix's files, split: a module is a component of its own, <staging>_<module>_Runtime, so an
-        # installer can offer it apart; other shared libraries are <staging>_Runtime, the rest Development;
+        # the prefix's files, split: a module is a component of its own, <module>_Runtime, so an installer can
+        # offer it apart; other shared libraries are <staging>_Runtime, the rest Development;
         # file by file, so no empty directory lands in a component
         file(GLOB_RECURSE _files LIST_DIRECTORIES false RELATIVE "${_prefix}" "${_prefix}/*")
         set(_places)
@@ -53,9 +53,9 @@ function(__FetchLayer_import_make_available VARIANT)
                     set(_component ${_c}_Runtime)
                 endif()
             endforeach()
-            if (_d MATCHES "^(lib|bin)/modules$")
+            if (_d MATCHES "^(lib|bin)/modules$" AND _n MATCHES "\\.module\\.")    # not an import library beside it
                 __FetchLayer_import_module_stem("${_n}" _stem)
-                set(_component ${_c}_${_stem}_Runtime)
+                set(_component ${_stem}_Runtime)
                 set(_target "${_name}::${_stem}")                 # a module file → an imported MODULE target
                 if (NOT TARGET ${_target})
                     add_library(${_target} MODULE IMPORTED GLOBAL)

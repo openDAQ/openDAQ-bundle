@@ -63,6 +63,67 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "opt/opendaq/lib")
 
+# NSIS: the core's installer as it is (its images, the PATH page, the old version removed first), under a name and a
+# registry key of the bundle's own, so it neither replaces nor uninstalls the core's
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "openDAQ")
+set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "openDAQ bundle")
+set(CPACK_NSIS_PACKAGE_NAME "openDAQ bundle")
+set(CPACK_NSIS_DISPLAY_NAME "openDAQ bundle ${BUNDLE_VERSION}")
+set(CPACK_NSIS_WELCOME_TITLE "Welcome to openDAQ Setup")
+set(CPACK_NSIS_BRANDING_TEXT "${CPACK_PACKAGE_VENDOR}")
+set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_LIST_DIR}/nsis/opendaq.ico")
+set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_LIST_DIR}/nsis/opendaq.ico")
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_LIST_DIR}/nsis/nsis_header.bmp" CPACK_NSIS_MUI_HEADERIMAGE)        # NSIS wants \
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_LIST_DIR}/nsis/nsis_welcome.bmp" CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP)
+set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
+set(CPACK_NSIS_MODIFY_PATH ON)
+set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+
+# A silent install (/S) shows no page, so it never adds to PATH; /PATH=AllUsers|CurrentUser|No chooses it on the
+# command line, as the page would, and records it for the uninstaller:
+#   opendaq-bundle-<version>-<triplet>.exe /S /PATH=AllUsers /D=C:\openDAQ        (/D last, unquoted)
+# (CPack sets CPACK_NSIS_DEFINES itself, so no FileFunc.nsh: the option is looked for in $CMDLINE by hand)
+set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
+  StrCpy $R1 ""
+  StrCpy $R2 0
+  bundle_path_scan:
+    StrCpy $R3 $CMDLINE 14 $R2
+    StrCmp $R3 "/PATH=AllUsers" 0 +3
+      StrCpy $R1 "AllUsers"
+      Goto bundle_path_found
+    StrCpy $R3 $CMDLINE 17 $R2
+    StrCmp $R3 "/PATH=CurrentUser" 0 +3
+      StrCpy $R1 "CurrentUser"
+      Goto bundle_path_found
+    StrCpy $R3 $CMDLINE 8 $R2
+    StrCmp $R3 "/PATH=No" 0 +3
+      StrCpy $R1 "No"
+      Goto bundle_path_found
+    IntOp $R2 $R2 + 1
+    StrCpy $R3 $CMDLINE 1 $R2
+    StrCmp $R3 "" bundle_path_done bundle_path_scan
+  bundle_path_found:
+    StrCpy $DO_NOT_ADD_TO_PATH 1
+    StrCpy $ADD_TO_PATH_ALL_USERS 0
+    StrCpy $ADD_TO_PATH_CURRENT_USER 0
+    StrCmp $R1 "AllUsers" 0 +3
+      StrCpy $DO_NOT_ADD_TO_PATH 0
+      StrCpy $ADD_TO_PATH_ALL_USERS 1
+    StrCmp $R1 "CurrentUser" 0 +3
+      StrCpy $DO_NOT_ADD_TO_PATH 0
+      StrCpy $ADD_TO_PATH_CURRENT_USER 1
+    Push "DoNotAddToPath"
+    Push "$DO_NOT_ADD_TO_PATH"
+    Call ConditionalAddToRegistry
+    Push "AddToPathAllUsers"
+    Push "$ADD_TO_PATH_ALL_USERS"
+    Call ConditionalAddToRegistry
+    Push "AddToPathCurrentUser"
+    Push "$ADD_TO_PATH_CURRENT_USER"
+    Call ConditionalAddToRegistry
+  bundle_path_done:
+]=])
+
 # the layers and components, the name and the install prefix, at cpack time
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/PackingProject.cmake")
 
@@ -76,14 +137,14 @@ if (APPLE)
 endif()
 
 # an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
-# the rest required. A prebuilt staging's module is <staging>_<module>_Runtime (FetchLayer/import.cmake); a layer
-# built here has no choices of its own, all its components required
+# the rest required. A prebuilt staging has <staging>_Runtime, <staging>_Development and a <module>_Runtime per
+# module (FetchLayer/import.cmake); a layer built here has no choices of its own, all its components required
 cpack_add_component_group(modules DISPLAY_NAME "Modules" DESCRIPTION "openDAQ modules" EXPANDED)
 foreach(_staging IN LISTS BUNDLE_STAGINGS)
     string(TOLOWER "${_staging}" _name)
     string(MAKE_C_IDENTIFIER "${_name}" _c)
     foreach(_component IN LISTS ${_name}_INSTALL_COMPONENTS)
-        if (_component MATCHES "^${_c}_(.+)_Runtime$")
+        if (${_name}_PREFIX AND _component MATCHES "^(.+)_Runtime$" AND NOT _component STREQUAL "${_c}_Runtime")
             cpack_add_component(${_component} DISPLAY_NAME "${CMAKE_MATCH_1}" GROUP modules)
         elseif (_component MATCHES "_Runtime$")
             cpack_add_component(${_component} DISPLAY_NAME "${_name} runtime" REQUIRED)
