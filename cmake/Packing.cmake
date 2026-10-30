@@ -71,10 +71,10 @@ set(CPACK_NSIS_PACKAGE_NAME "openDAQ bundle")
 set(CPACK_NSIS_DISPLAY_NAME "openDAQ bundle ${BUNDLE_VERSION}")
 set(CPACK_NSIS_WELCOME_TITLE "Welcome to openDAQ Setup")
 set(CPACK_NSIS_BRANDING_TEXT "${CPACK_PACKAGE_VENDOR}")
-set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_LIST_DIR}/nsis/opendaq.ico")
-set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_LIST_DIR}/nsis/opendaq.ico")
-file(TO_NATIVE_PATH "${CMAKE_CURRENT_LIST_DIR}/nsis/nsis_header.bmp" CPACK_NSIS_MUI_HEADERIMAGE)        # NSIS wants \
-file(TO_NATIVE_PATH "${CMAKE_CURRENT_LIST_DIR}/nsis/nsis_welcome.bmp" CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP)
+set(CPACK_NSIS_MUI_ICON "${PROJECT_SOURCE_DIR}/packaging/nsis/opendaq.ico")
+set(CPACK_NSIS_MUI_UNIICON "${PROJECT_SOURCE_DIR}/packaging/nsis/opendaq.ico")
+file(TO_NATIVE_PATH "${PROJECT_SOURCE_DIR}/packaging/nsis/nsis_header.bmp" CPACK_NSIS_MUI_HEADERIMAGE)        # NSIS wants \
+file(TO_NATIVE_PATH "${PROJECT_SOURCE_DIR}/packaging/nsis/nsis_welcome.bmp" CPACK_NSIS_MUI_WELCOMEFINISHPAGE_BITMAP)
 set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
 set(CPACK_NSIS_MODIFY_PATH ON)
 set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
@@ -132,7 +132,7 @@ include(CPack)
 # macOS has no uninstall: the package brings a script that removes its files by its receipts, a component of the
 # bundle's own, which PackingProject.cmake adds to a productbuild package
 if (APPLE)
-    install(PROGRAMS "${CMAKE_CURRENT_LIST_DIR}/macos/uninstall-opendaq-bundle.sh" DESTINATION bin COMPONENT bundle_Runtime)
+    install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/productbuild/uninstall-opendaq-bundle.sh" DESTINATION bin COMPONENT bundle_Runtime)
     cpack_add_component(bundle_Runtime DISPLAY_NAME "uninstall script" REQUIRED)
 endif()
 
