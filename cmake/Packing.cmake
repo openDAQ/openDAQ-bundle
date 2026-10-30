@@ -1,6 +1,6 @@
 ##
 ## The bundle's targets as packages. A package preset picks what goes in — stagings × components — and the
-## generator and the name; see PackingProject.cmake. The utils name the package <name>-<version>-<triplet>,
+## generator and the name; see CPackOptions.cmake. The utils name the package <name>-<version>-<triplet>,
 ## as the core's and the modules', and write staging-meta.json next to it.
 ##
 ##   cpack --preset core       opendaq × Runtime, Development
@@ -13,7 +13,7 @@ set(BUNDLE_VERSION "${PROJECT_VERSION}" CACHE STRING "Version of the bundle, the
 
 # each staging's install components, of this build's own variant, by what they are for: Runtime when the name
 # says so, Development else — prebuilt, <staging>_Runtime/_Development; from sources, the names the layer gave
-# (openDAQ_opcua_client_module_Runtime, External); for PackingProject.cmake to pick from at cpack time
+# (openDAQ_opcua_client_module_Runtime, External); for CPackOptions.cmake to pick from at cpack time
 foreach(_staging IN LISTS BUNDLE_STAGINGS)
     FetchLayer_GetProperties(${_staging})
     string(TOLOWER "${_staging}" _name)
@@ -125,12 +125,12 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
 ]=])
 
 # the layers and components, the name and the install prefix, at cpack time
-set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/PackingProject.cmake")
+set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/CPackOptions.cmake")
 
 include(CPack)
 
 # macOS has no uninstall: the package brings a script that removes its files by its receipts, a component of the
-# bundle's own, which PackingProject.cmake adds to a productbuild package
+# bundle's own, which CPackOptions.cmake adds to a productbuild package
 if (APPLE)
     install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/productbuild/uninstall-opendaq-bundle.sh" DESTINATION bin COMPONENT bundle_Runtime)
     cpack_add_component(bundle_Runtime DISPLAY_NAME "uninstall script" REQUIRED)
