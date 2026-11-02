@@ -69,12 +69,14 @@ jobs:
     needs: pull
     runs-on: ubuntu-latest
     steps:
+      # how download-artifact lays out what a pattern matches, as reusable.yml downloads its deps: one artifact by
+      # its name, and several by a {a,b} pattern
       - uses: actions/download-artifact@v4
         with:
-          pattern: staging-*
-          path: stagings
-      - run: |
-          for a in stagings/*; do
-            echo "== ${a#stagings/}"
-            ls -la "$a"
-          done
+          pattern: staging-opendaq-x86_64-linux-gcc-11-release
+          path: one
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "{staging-opendaq-x86_64-linux-gcc-11-release,staging-opcua-modules-x86_64-linux-gcc-11-release}"
+          path: two
+      - run: find one two | sort
