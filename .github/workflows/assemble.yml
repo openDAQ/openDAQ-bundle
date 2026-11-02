@@ -134,7 +134,7 @@ jobs:
             productbuild) sudo installer -pkg "$(find installer -name '*.pkg' | head -1)" -target /
                           echo "prefix=/opt/opendaq" >> "$GITHUB_OUTPUT" ;;
             NSIS)         exe=$(cygpath -w "$(find installer -name '*.exe' | head -1)")
-                          pwsh -Command "Start-Process -Wait -FilePath '$exe' -ArgumentList '/S','/PATH=AllUsers','/D=C:\opendaq'"
+                          pwsh -Command "Start-Process -Wait -FilePath '$exe' -ArgumentList '/S','/PATH=No','/D=C:\opendaq'"
                           echo "prefix=C:/opendaq" >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -144,3 +144,27 @@ jobs:
                 -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }} -DEXPECT_MODULES=${{ matrix.check.modules }}
           cmake --build build/installed --config Release
           ctest --test-dir build/installed -C Release --output-on-failure
+
+      # A silent install that adds to PATH has hung, here and in an ssh session: the template broadcasts the
+      # change to every top-level window, up to 5 s each, and a session without a desktop answers slowly. Timed
+      # into another folder, to see.
+      - name: Install with PATH (timed)
+        if: matrix.check.generator == 'NSIS'
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem installer -Recurse -Filter *.exe | Select-Object -First 1).FullName
+          & "C:\opendaq\Uninstall.exe" /S "_?=C:\opendaq" | Out-Null
+          $windows = @(Get-Process | Where-Object { $_.MainWindowHandle -ne 0 }).Count
+          Write-Host "processes with a main window: $windows"
+          $t = Get-Date
+          $p = Start-Process -FilePath $exe -ArgumentList '/S','/PATH=AllUsers','/D=C:\opendaq-path' -PassThru
+          if ($p.WaitForExit(360000)) {
+            Write-Host "exit $($p.ExitCode) after $([int]((Get-Date) - $t).TotalSeconds) s"
+          } else {
+            Write-Host "still running after 6 min; its windows:"
+            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Id, ProcessName, MainWindowTitle -AutoSize | Out-String | Write-Host
+            $p.Kill()
+          }
+          $path = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          Write-Host "machine PATH has C:\opendaq-path\bin: $($path -like '*C:\opendaq-path\bin*')"
+
