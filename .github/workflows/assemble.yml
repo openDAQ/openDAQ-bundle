@@ -1,0 +1,79 @@
+name: Assemble the bundle
+
+# The bundle assembled from stagings, without compiling. Every staging comes as an artifact: those of the bundle's
+# revisions (CMakePresets.json, the preset "revisions") from the registry, by staging-pull, one artifact per staging
+# and triplet, staging-<staging>-<triplet>. A module's staging is asked for by the core it was built against too,
+# so the modules of one bundle share its core.
+#
+# First step: the stagings are pulled and listed; the installers follow.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  resolve:
+    name: Resolve the stagings
+    runs-on: ubuntu-latest
+    outputs:
+      staging-artifacts: ${{ steps.stagings.outputs.staging-artifacts }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # each staging of the bundle × each triplet, by its revision, and a module's by its core's too
+      - name: Request the stagings
+        id: stagings
+        shell: python3 {0}
+        run: |
+          import json, os
+
+          REGISTRY = "ghcr.io/openDAQ/dev/staging"
+          TRIPLETS = ["x86_64-linux-gcc-11-release", "x86_64-windows-msvc-143-release",
+                      "armv8-macos-apple-clang-21-release", "x86_64-macos-apple-clang-21-release"]
+          # a layer's revision variable → its staging
+          STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
+                      "LTSTREAMINGMODULESMODERN": "lt-streaming-modules", "ASAM-CMP-MODULES": "asam-cmp-modules"}
+
+          presets = json.load(open("CMakePresets.json"))["configurePresets"]
+          revisions = next(p for p in presets if p["name"] == "revisions")["cacheVariables"]
+          revision = {STAGINGS[k.removeprefix("BUNDLE_REVISION_")]: v for k, v in revisions.items()}
+
+          entries = []
+          for staging, sha in revision.items():
+              for triplet in TRIPLETS:
+                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
+                  if staging != "opendaq":
+                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
+                  entries.append({"artifact": f"staging-{staging}-{triplet}",
+                                  "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+
+          print(json.dumps(entries, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"staging-artifacts={json.dumps(entries)}\n")
+
+  pull:
+    name: Pull
+    needs: resolve
+    uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
+    with:
+      staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
+
+  list:
+    name: List the stagings
+    needs: pull
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: staging-*
+          path: stagings
+      - run: |
+          for a in stagings/*; do
+            echo "== ${a#stagings/}"
+            ls -la "$a"
+          done
