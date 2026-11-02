@@ -73,8 +73,10 @@ jobs:
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": generator, "package-preset": "installer"}]})
               checks.append({"job": job, "runner": runner, "generator": generator, "modules": modules})
 
-          # DEB names the libraries the modules need in its Depends (dpkg-shlibdeps, which needs them there); NSIS packs
-          packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8"]},
+          # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
+          # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; NSIS packs
+          packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8", "libx11-6",
+                         "libxrandr2", "libxcursor1", "libxi6", "libgl1", "libudev1", "libfreetype6", "libssl3"]},
                        {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
 
           outputs = {"staging-artifacts": pull, "jobs": list(JOBS), "packages": packages,

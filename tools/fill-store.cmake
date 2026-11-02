@@ -1,7 +1,8 @@
-# A debugging aid, not part of the design: fills a store from the registry, every triplet of every layer.
+# Fills a store from the registry: every triplet of every layer, or the triplets given. The bundle's CI fills its
+# store so; locally a debugging aid.
 #
 #   cmake -DSTORE=build/store -DREGISTRY=ghcr.io/opendaq/dev/staging \
-#         -DLAYERS="opendaq=<sha>;opcua-modules=<sha>;…" \
+#         -DLAYERS="opendaq=<sha>;opcua-modules=<sha>;…" [-DTRIPLETS="<triplet>;…"] \
 #         [-DORAS_REGISTRY_CONFIG=~/.oras/config.json] -P tools/fill-store.cmake
 #
 # For each layer: the newest index whose revision is the one given; for each package in it, the identity
@@ -112,6 +113,9 @@ foreach(_entry IN LISTS LAYERS)
         string(JSON _ann GET "${_index}" manifests ${_i} annotations)
         string(JSON _triplet GET "${_ann}" "com.opendaq.package.triplet")
         string(JSON _title GET "${_ann}" "org.opencontainers.image.title")
+        if (TRIPLETS AND NOT _triplet IN_LIST TRIPLETS)
+            continue()
+        endif()
 
         # the build's identity: the package's annotations, the index's where it has none
         set(b_NAME "${_layer}")
