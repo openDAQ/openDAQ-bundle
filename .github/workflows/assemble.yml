@@ -33,7 +33,8 @@ jobs:
           import json, os
 
           REGISTRY = "ghcr.io/openDAQ/dev/staging"
-          TRIPLETS = ["x86_64-linux-gcc-11-release", "x86_64-windows-msvc-143-release",
+          # DEB for both Linux architectures, NSIS for 64-bit Windows, pkg for both macOS ones
+          TRIPLETS = ["x86_64-linux-gcc-11-release", "armv8-linux-gcc-11-release", "x86_64-windows-msvc-143-release",
                       "armv8-macos-apple-clang-21-release", "x86_64-macos-apple-clang-21-release"]
           # a layer's revision variable → its staging
           STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
