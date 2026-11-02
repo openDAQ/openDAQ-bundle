@@ -1,11 +1,12 @@
 name: Assemble the bundle
 
-# The bundle assembled from stagings, without compiling. Every staging comes as an artifact: those of the bundle's
-# revisions (CMakePresets.json, the preset "revisions") from the registry, by staging-pull, one artifact per staging
-# and triplet, staging-<staging>-<triplet>. A module's staging is asked for by the core it was built against too,
-# so the modules of one bundle share its core.
-#
-# First step: the stagings are pulled and listed; the installers follow.
+# The bundle's installers assembled from stagings, without compiling. Every staging comes as an artifact: those of
+# the bundle's revisions (CMakePresets.json, the preset "revisions") from the registry, by staging-pull, one
+# artifact per staging and triplet, staging-<staging>-<triplet>; a module's is asked for by the core it was built
+# against too, so the modules of one bundle share its core. reusable.yml builds each platform as the stagings were
+# built: the stagings unpacked each into its own folder, given to the bundle as FETCHLAYER_PREFIX_<STAGING>
+# (configure preset bundle-prefixes), the installer packed (package preset installer). Each installer is then
+# installed as a user would and smoke-checked by tests/installed.
 
 on:
   workflow_dispatch:
@@ -22,10 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       staging-artifacts: ${{ steps.stagings.outputs.staging-artifacts }}
+      jobs: ${{ steps.stagings.outputs.jobs }}
+      packages: ${{ steps.stagings.outputs.packages }}
+      cmake-presets: ${{ steps.stagings.outputs.cmake-presets }}
+      cpack-presets: ${{ steps.stagings.outputs.cpack-presets }}
+      checks: ${{ steps.stagings.outputs.checks }}
     steps:
       - uses: actions/checkout@v4
 
-      # each staging of the bundle × each triplet, by its revision, and a module's by its core's too
       - name: Request the stagings
         id: stagings
         shell: python3 {0}
@@ -33,9 +38,15 @@ jobs:
           import json, os
 
           REGISTRY = "ghcr.io/openDAQ/dev/staging"
-          # DEB for both Linux architectures, NSIS for 64-bit Windows, pkg for both macOS ones
-          TRIPLETS = ["x86_64-linux-gcc-11-release", "armv8-linux-gcc-11-release", "x86_64-windows-msvc-143-release",
-                      "armv8-macos-apple-clang-21-release", "x86_64-macos-apple-clang-21-release"]
+          # a reusable.yml job → the triplet of the stagings it takes, the installer it packs, and where that
+          # installer is installed and checked (the runner, how many modules load: ASAM's need Npcap on Windows)
+          JOBS = {
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04",     14),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm", 14),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022",     12),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
+          }
           # a layer's revision variable → its staging
           STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
                       "LTSTREAMINGMODULESMODERN": "lt-streaming-modules", "ASAM-CMP-MODULES": "asam-cmp-modules"}
@@ -44,18 +55,34 @@ jobs:
           revisions = next(p for p in presets if p["name"] == "revisions")["cacheVariables"]
           revision = {STAGINGS[k.removeprefix("BUNDLE_REVISION_")]: v for k, v in revisions.items()}
 
-          entries = []
-          for staging, sha in revision.items():
-              for triplet in TRIPLETS:
+          pull, packages, cmake_presets, cpack_presets, checks = [], [], [], [], []
+          for job, (triplet, generator, runner, modules) in JOBS.items():
+              artifacts, prefixes = [], {}
+              for staging, sha in revision.items():
                   annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
                   if staging != "opendaq":
                       annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
-                  entries.append({"artifact": f"staging-{staging}-{triplet}",
-                                  "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+                  name = f"staging-{staging}-{triplet}"
+                  pull.append({"artifact": name, "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+                  artifacts.append({"name": name, "dir": f"stagings/{staging}"})
+                  # the core's tarball carries its install prefix, opt/opendaq, except on Windows
+                  inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
+                  prefixes[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
+              packages.append({"match-jobs": [job], "artifacts": artifacts})
+              cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": prefixes})
+              cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": generator, "package-preset": "installer"}]})
+              checks.append({"job": job, "runner": runner, "generator": generator, "modules": modules})
 
-          print(json.dumps(entries, indent=2))
+          # DEB names the libraries the modules need in its Depends (dpkg-shlibdeps, which needs them there); NSIS packs
+          packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8"]},
+                       {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
+
+          outputs = {"staging-artifacts": pull, "jobs": list(JOBS), "packages": packages,
+                     "cmake-presets": cmake_presets, "cpack-presets": cpack_presets, "checks": checks}
+          print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"staging-artifacts={json.dumps(entries)}\n")
+              for key, value in outputs.items():
+                  f.write(f"{key}={json.dumps(value)}\n")
 
   pull:
     name: Pull
@@ -64,19 +91,54 @@ jobs:
     with:
       staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
 
-  list:
-    name: List the stagings
-    needs: pull
-    runs-on: ubuntu-latest
+  build:
+    name: Build
+    needs: [resolve, pull]
+    uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@bundle/extract-each-artifact-into-its-dir
+    with:
+      include-jobs: ${{ needs.resolve.outputs.jobs }}
+      packages: ${{ needs.resolve.outputs.packages }}
+      cmake-presets: ${{ needs.resolve.outputs.cmake-presets }}
+      cpack-presets: ${{ needs.resolve.outputs.cpack-presets }}
+
+  # installed as a user would, everything selected, and smoke-checked
+  check:
+    name: Check ${{ matrix.check.job }}
+    needs: [resolve, build]
+    runs-on: ${{ matrix.check.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJSON(needs.resolve.outputs.checks) }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      # how download-artifact lays out what a pattern matches, as reusable.yml downloads its deps: one artifact by
-      # its name, and several by a {a,b} pattern
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          pattern: staging-opendaq-x86_64-linux-gcc-11-release
-          path: one
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: "{staging-opendaq-x86_64-linux-gcc-11-release,staging-opcua-modules-x86_64-linux-gcc-11-release}"
-          path: two
-      - run: find one two | sort
+          name: package-${{ matrix.check.job }}
+          path: installer
+
+      - name: Install
+        id: install
+        run: |
+          find installer -type f
+          case "${{ matrix.check.generator }}" in
+            DEB)          sudo apt-get update -qq
+                          sudo apt-get install -y -qq "$(find "$PWD/installer" -name '*.deb' | head -1)"
+                          echo "prefix=/opt/opendaq" >> "$GITHUB_OUTPUT" ;;
+            productbuild) sudo installer -pkg "$(find installer -name '*.pkg' | head -1)" -target /
+                          echo "prefix=/opt/opendaq" >> "$GITHUB_OUTPUT" ;;
+            NSIS)         exe=$(cygpath -w "$(find installer -name '*.exe' | head -1)")
+                          pwsh -Command "Start-Process -Wait -FilePath '$exe' -ArgumentList '/S','/PATH=AllUsers','/D=C:\opendaq'"
+                          echo "prefix=C:/opendaq" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Smoke check
+        run: |
+          cmake -S tests/installed -B build/installed \
+                -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }} -DEXPECT_MODULES=${{ matrix.check.modules }}
+          cmake --build build/installed --config Release
+          ctest --test-dir build/installed -C Release --output-on-failure
