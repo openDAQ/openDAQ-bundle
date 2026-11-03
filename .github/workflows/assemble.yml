@@ -7,10 +7,66 @@ name: Assemble the bundle
 # built: the stagings unpacked each into its own folder, given to the bundle as FETCHLAYER_PREFIX_<STAGING>
 # (configure preset bundle-prefixes), the installer packed (package preset installer). Each installer is then
 # installed as a user would and smoke-checked by tests/installed.
+#
+# A layer's revision can be given as an input (a commit, or a branch or tag taken at its head now), in place of the
+# preset's. A caller that has built a staging in its own run (a PR of the core or a module) names its artifact in
+# `artifacts`; that staging is not pulled. A staging the registry lacks fails the pull: it is staged first.
 
 on:
   workflow_dispatch:
+    inputs:
+      opendaq:
+        description: "openDAQ: a commit, branch or tag (empty: the preset's revision)"
+        type: string
+        default: ""
+      opcua-modules:
+        description: "OpcUaModules: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      mqtt-module:
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      lt-streaming-modules:
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      asam-cmp-modules:
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
   workflow_call:
+    inputs:
+      opendaq:
+        description: "openDAQ: a commit, branch or tag (empty: the preset's revision)"
+        type: string
+        default: ""
+      opcua-modules:
+        description: "OpcUaModules: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      mqtt-module:
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      lt-streaming-modules:
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      asam-cmp-modules:
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: the preset's)"
+        type: string
+        default: ""
+      artifacts:
+        description: >-
+          Stagings the caller built in this run, as artifacts, not pulled: a JSON object, staging → artifact name,
+          {job} for the job, e.g. {"opcua-modules": "staging-{job}"}; their revision is the caller's
+        type: string
+        default: "{}"
+      bundle-ref:
+        description: "The bundle's commit, branch or tag to assemble with (a caller's run checks out the caller)"
+        type: string
+        default: main
   pull_request:
 
 permissions:
@@ -30,12 +86,17 @@ jobs:
       checks: ${{ steps.stagings.outputs.checks }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ-bundle
+          ref: ${{ github.repository == 'openDAQ/openDAQ-bundle' && github.sha || inputs.bundle-ref }}
 
       - name: Request the stagings
         id: stagings
         shell: python3 {0}
+        env:
+          INPUTS: ${{ toJSON(inputs) }}
         run: |
-          import json, os
+          import json, os, re, subprocess, sys
 
           REGISTRY = "ghcr.io/openDAQ/dev/staging"
           # a reusable.yml job → the triplet of the stagings it takes, the installer it packs, and where that
@@ -47,23 +108,60 @@ jobs:
               "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
               "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
           }
-          # a layer's revision variable → its staging
+          # a layer's revision variable → its staging, and the staging's repository
           STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
                       "LTSTREAMINGMODULESMODERN": "lt-streaming-modules", "ASAM-CMP-MODULES": "asam-cmp-modules"}
+          REPOSITORIES = {"opendaq": "openDAQ", "opcua-modules": "OpcUaModules", "mqtt-module": "MQTTStreamingModule",
+                          "lt-streaming-modules": "LTStreamingModulesModern", "asam-cmp-modules": "ASAM-CMP-Modules"}
 
+          inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
+          local = json.loads(inputs.get("artifacts") or "{}")
+          if unknown := set(local) - set(REPOSITORIES):
+              sys.exit(f"::error::artifacts names no staging of the bundle: {sorted(unknown)}")
+
+          def commit(staging, ref):
+              """A full sha as it is; a branch or a tag → its commit, as the repository has it now."""
+              if re.fullmatch(r"[0-9a-f]{40}", ref):
+                  return ref
+              url = f"https://github.com/openDAQ/{REPOSITORIES[staging]}.git"
+              out = subprocess.run(["git", "ls-remote", url, ref], capture_output=True, text=True, check=True).stdout
+              refs = dict(reversed(line.split("\t")) for line in out.splitlines())
+              for name in (f"refs/tags/{ref}^{{}}", f"refs/tags/{ref}", f"refs/heads/{ref}"):
+                  if name in refs:
+                      return refs[name]
+              sys.exit(f"::error::{REPOSITORIES[staging]} has no branch or tag {ref!r} (a commit is given in full)")
+
+          # the preset's revisions, each replaced by an input that is set
           presets = json.load(open("CMakePresets.json"))["configurePresets"]
           revisions = next(p for p in presets if p["name"] == "revisions")["cacheVariables"]
-          revision = {STAGINGS[k.removeprefix("BUNDLE_REVISION_")]: v for k, v in revisions.items()}
+          revision = {}
+          for variable, ref in revisions.items():
+              staging = STAGINGS[variable.removeprefix("BUNDLE_REVISION_")]
+              given = (inputs.get(staging) or "").strip()
+              revision[staging] = commit(staging, given or ref)
+
+          summary = ["| Staging | Revision | From |", "|-|-|-|"]
+          for staging, sha in revision.items():
+              source = f"this run, `{local[staging]}`" if staging in local else "ghcr"
+              summary.append(f"| {staging} | [`{sha[:12]}`](https://github.com/openDAQ/{REPOSITORIES[staging]}/commit/{sha}) | {source} |")
+          print("\n".join(summary))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(summary) + "\n")
 
           pull, packages, cmake_presets, cpack_presets, checks = [], [], [], [], []
           for job, (triplet, generator, runner, modules) in JOBS.items():
               artifacts, prefixes = [], {}
               for staging, sha in revision.items():
-                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
-                  if staging != "opendaq":
-                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
-                  name = f"staging-{staging}-{triplet}"
-                  pull.append({"artifact": name, "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+                  if staging in local:
+                      name = local[staging].replace("{job}", job)
+                  else:
+                      # a module's staging is asked for by the core it was built against too, so the modules of one
+                      # bundle share its core
+                      annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
+                      if staging != "opendaq":
+                          annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
+                      name = f"staging-{staging}-{triplet}"
+                      pull.append({"artifact": name, "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
                   artifacts.append({"name": name, "dir": f"stagings/{staging}"})
                   # the core's tarball carries its install prefix, opt/opendaq, except on Windows
                   inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
@@ -89,6 +187,7 @@ jobs:
   pull:
     name: Pull
     needs: resolve
+    if: needs.resolve.outputs.staging-artifacts != '[]'
     uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
     with:
       staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
@@ -96,6 +195,7 @@ jobs:
   build:
     name: Build
     needs: [resolve, pull]
+    if: ${{ !failure() && !cancelled() }}     # also when every staging came from the caller and nothing was pulled
     uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@bundle/extract-each-artifact-into-its-dir
     with:
       include-jobs: ${{ needs.resolve.outputs.jobs }}
@@ -117,6 +217,9 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ-bundle
+          ref: ${{ github.repository == 'openDAQ/openDAQ-bundle' && github.sha || inputs.bundle-ref }}
 
       - uses: actions/download-artifact@v4
         with:
