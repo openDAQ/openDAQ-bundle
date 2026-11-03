@@ -100,15 +100,13 @@ jobs:
 
           REGISTRY = "ghcr.io/openDAQ/dev/staging"
           # a reusable.yml job → the triplet of the stagings it takes, the installer it packs, and where that
-          # installer is installed and checked (the runner, how many modules load: ASAM's need Npcap on Windows).
-          # Linux takes the manylinux stagings, as the wheels are built: packing compiles nothing, so the DEB is
-          # packed on Ubuntu, and its Depends are Ubuntu's
+          # installer is installed and checked (the runner, how many modules load: ASAM's need Npcap on Windows)
           JOBS = {
-              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-manylinux_2_28-gcc-14-release", "DEB",          "ubuntu-22.04",     14),
-              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-manylinux_2_28-gcc-14-release",  "DEB",          "ubuntu-24.04-arm", 14),
-              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",      "NSIS",         "windows-2022",     12),
-              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",   "productbuild", "macos-26",         14),
-              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release",  "productbuild", "macos-26-intel",   14),
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04",     14),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm", 14),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022",     12),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
           }
           # a layer's revision variable → its staging, and the staging's repository
           STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
@@ -152,8 +150,7 @@ jobs:
 
           pull, packages, cmake_presets, cpack_presets, checks = [], [], [], [], []
           for job, (triplet, generator, runner, modules) in JOBS.items():
-              # the packages are named by the stagings' triplet, not by the one this job would compose
-              artifacts, prefixes = [], {"BUNDLE_TRIPLET": triplet}
+              artifacts, prefixes = [], {}
               for staging, sha in revision.items():
                   if staging in local:
                       name = local[staging].replace("{job}", job)
