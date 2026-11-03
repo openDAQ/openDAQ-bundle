@@ -171,7 +171,7 @@ jobs:
                   artifacts.append({"name": name, "dir": f"stagings/{staging}"})
                   # the core's tarball carries its install prefix, opt/opendaq, except on Windows
                   inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
-                  prefixes[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
+                  cache_variables[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
               packages.append({"match-jobs": [job], "artifacts": artifacts})
               cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": generator, "package-preset": "installer"}]})
