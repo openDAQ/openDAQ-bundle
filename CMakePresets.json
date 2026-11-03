@@ -101,23 +101,10 @@
             ]
         },
         {
-            "name": "revisions",
-            "hidden": true,
-            "description": "The bundle: one commit per layer",
-            "cacheVariables": {
-                "BUNDLE_REVISION_OPENDAQ": "1a82fa899b78e23ddcf61975eb9255b22e713808",
-                "BUNDLE_REVISION_OPCUAMODULES": "485710c37d06bcc6b6c852e57fd27c0b2cce7d08",
-                "BUNDLE_REVISION_MQTTSTREAMINGMODULE": "3a55f4bf710ca10513ed64464e74680246e35e9f",
-                "BUNDLE_REVISION_LTSTREAMINGMODULESMODERN": "322d770b08e033eb6033d417c2310fdb832e088a",
-                "BUNDLE_REVISION_ASAM-CMP-MODULES": "a95b8cea31cca2c5e437c7e55d38bc9efc7703a6"
-            }
-        },
-        {
             "name": "bundle-prefixes",
             "displayName": "Bundle from stagings given as prefixes (FETCHLAYER_PREFIX_<STAGING>), nothing compiled; CI",
             "inherits": [
-                "release",
-                "revisions"
+                "release"
             ],
             "cacheVariables": {
                 "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
@@ -129,8 +116,7 @@
             "displayName": "Bundle by FetchLayer, this machine's triplet",
             "inherits": [
                 "release",
-                "ninja",
-                "revisions"
+                "ninja"
             ],
             "cacheVariables": {
                 "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",

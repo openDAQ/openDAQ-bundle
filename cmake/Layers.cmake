@@ -3,9 +3,9 @@
 ## repository, named as in the manifest — its stagings under it, and its settings — they matter only when the
 ## layer compiles here.
 ##
-## From the cache (a preset or -D): the revisions, one per layer, BUNDLE_REVISION_<LAYER>, the name upper-cased —
-## a full sha, a tag or a branch, main by default; and each axis's values, BUNDLE_AXIS_<AXIS>, and its own value where it can be
-## given, BUNDLE_<AXIS>.
+## The revisions, one per layer — a full sha, a tag or a branch — from bundle.json, the layer named as the repository;
+## BUNDLE_REVISION_<LAYER>, the name upper-cased, in place of one (a preset or -D). From the cache: each axis's
+## values, BUNDLE_AXIS_<AXIS>, and its own value where it can be given, BUNDLE_<AXIS>.
 ##
 
 include_guard(GLOBAL)
@@ -29,9 +29,20 @@ FetchLayer_DeclareAxis(
 
 # === the layers ==============================================================================================
 
+# a layer's revision: BUNDLE_REVISION_<LAYER> when given, else bundle.json's — read at every configure, so an edit
+# of it is taken without clearing the cache
+set(_bundle_json "${CMAKE_CURRENT_LIST_DIR}/../bundle.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_bundle_json}")
+file(READ "${_bundle_json}" _bundle)
 foreach(_layer openDAQ OpcUaModules MQTTStreamingModule LTStreamingModulesModern ASAM-CMP-Modules)
     string(TOUPPER "${_layer}" _upper)
-    set(BUNDLE_REVISION_${_upper} "main" CACHE STRING "The revision of ${_layer} in the bundle: a full sha, a tag or a branch")
+    set(BUNDLE_REVISION_${_upper} "" CACHE STRING "The revision of ${_layer}: a full sha, a tag or a branch; empty: bundle.json's")
+    if (NOT BUNDLE_REVISION_${_upper})
+        string(JSON BUNDLE_REVISION_${_upper} ERROR_VARIABLE _error GET "${_bundle}" "${_layer}")
+        if (_error)
+            message(FATAL_ERROR "bundle.json names no revision of ${_layer}: ${_error}")
+        endif()
+    endif()
 endforeach()
 
 

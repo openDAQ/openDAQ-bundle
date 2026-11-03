@@ -1,7 +1,7 @@
 name: Assemble the bundle
 
 # The bundle's installers assembled from stagings, without compiling. Every staging comes as an artifact: those of
-# the bundle's revisions (CMakePresets.json, the preset "revisions") from the registry, by staging-pull, one
+# the bundle's revisions (bundle.json) from the registry, by staging-pull, one
 # artifact per staging and triplet, staging-<staging>-<triplet>; a module's is asked for by the core it was built
 # against too, so the modules of one bundle share its core. reusable.yml builds each platform as the stagings were
 # built: the stagings unpacked each into its own folder, given to the bundle as FETCHLAYER_PREFIX_<STAGING>
@@ -9,52 +9,52 @@ name: Assemble the bundle
 # installed as a user would and smoke-checked by tests/installed.
 #
 # A layer's revision can be given as an input (a commit, or a branch or tag taken at its head now), in place of the
-# preset's. A caller that has built a staging in its own run (a PR of the core or a module) names its artifact in
+# bundle.json's. A caller that has built a staging in its own run (a PR of the core or a module) names its artifact in
 # `artifacts`; that staging is not pulled. A staging the registry lacks fails the pull: it is staged first.
 
 on:
   workflow_dispatch:
     inputs:
       opendaq:
-        description: "openDAQ: a commit, branch or tag (empty: the preset's revision)"
+        description: "openDAQ: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       opcua-modules:
-        description: "OpcUaModules: a commit, branch or tag (empty: the preset's)"
+        description: "OpcUaModules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       mqtt-module:
-        description: "MQTTStreamingModule: a commit, branch or tag (empty: the preset's)"
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       lt-streaming-modules:
-        description: "LTStreamingModulesModern: a commit, branch or tag (empty: the preset's)"
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       asam-cmp-modules:
-        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: the preset's)"
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
   workflow_call:
     inputs:
       opendaq:
-        description: "openDAQ: a commit, branch or tag (empty: the preset's revision)"
+        description: "openDAQ: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       opcua-modules:
-        description: "OpcUaModules: a commit, branch or tag (empty: the preset's)"
+        description: "OpcUaModules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       mqtt-module:
-        description: "MQTTStreamingModule: a commit, branch or tag (empty: the preset's)"
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       lt-streaming-modules:
-        description: "LTStreamingModulesModern: a commit, branch or tag (empty: the preset's)"
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       asam-cmp-modules:
-        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: the preset's)"
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
       artifacts:
@@ -99,20 +99,26 @@ jobs:
           import json, os, re, subprocess, sys
 
           REGISTRY = "ghcr.io/openDAQ/dev/staging"
-          # a reusable.yml job → the triplet of the stagings it takes, the installer it packs, and where that
-          # installer is installed and checked (the runner, how many modules load: ASAM's need Npcap on Windows)
+          # one entry per platform the bundle is assembled for:
+          #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
+          #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
+          #   generator  the CPack generator of its installer
+          #   runner     where the installer is installed and smoke-checked (tests/installed)
+          #   modules    how many modules the smoke check expects to load (Windows: ASAM's two need Npcap, absent)
+          # runner and modules serve the smoke check, a debugging aid until the integration tests take the installers;
+          # they go with it
           JOBS = {
+              # job                                          triplet                                 generator       runner              modules
               "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04",     14),
               "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm", 14),
               "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022",     12),
               "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
               "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
           }
-          # a layer's revision variable → its staging, and the staging's repository
-          STAGINGS = {"OPENDAQ": "opendaq", "OPCUAMODULES": "opcua-modules", "MQTTSTREAMINGMODULE": "mqtt-module",
-                      "LTSTREAMINGMODULESMODERN": "lt-streaming-modules", "ASAM-CMP-MODULES": "asam-cmp-modules"}
-          REPOSITORIES = {"opendaq": "openDAQ", "opcua-modules": "OpcUaModules", "mqtt-module": "MQTTStreamingModule",
-                          "lt-streaming-modules": "LTStreamingModulesModern", "asam-cmp-modules": "ASAM-CMP-Modules"}
+          # a layer, named as its repository in bundle.json → its staging
+          STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
+                      "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
+          REPOSITORIES = {staging: layer for layer, staging in STAGINGS.items()}
 
           inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
           local = json.loads(inputs.get("artifacts") or "{}")
@@ -131,12 +137,10 @@ jobs:
                       return refs[name]
               sys.exit(f"::error::{REPOSITORIES[staging]} has no branch or tag {ref!r} (a commit is given in full)")
 
-          # the preset's revisions, each replaced by an input that is set
-          presets = json.load(open("CMakePresets.json"))["configurePresets"]
-          revisions = next(p for p in presets if p["name"] == "revisions")["cacheVariables"]
+          # bundle.json's revisions, each replaced by an input that is set
           revision = {}
-          for variable, ref in revisions.items():
-              staging = STAGINGS[variable.removeprefix("BUNDLE_REVISION_")]
+          for layer, ref in json.load(open("bundle.json")).items():
+              staging = STAGINGS[layer]
               given = (inputs.get(staging) or "").strip()
               revision[staging] = commit(staging, given or ref)
 
