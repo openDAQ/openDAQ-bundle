@@ -154,7 +154,9 @@ jobs:
 
           pull, packages, cmake_presets, cpack_presets, checks = [], [], [], [], []
           for job, (triplet, generator, runner, modules) in JOBS.items():
-              artifacts, prefixes = [], {}
+              # the commits resolved here, so configure takes the same ones and resolves no ref again
+              artifacts = []
+              cache_variables = {f"BUNDLE_REVISION_{REPOSITORIES[staging].upper()}": sha for staging, sha in revision.items()}
               for staging, sha in revision.items():
                   if staging in local:
                       name = local[staging].replace("{job}", job)
@@ -171,7 +173,7 @@ jobs:
                   inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
                   prefixes[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
               packages.append({"match-jobs": [job], "artifacts": artifacts})
-              cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": prefixes})
+              cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": generator, "package-preset": "installer"}]})
               checks.append({"job": job, "runner": runner, "generator": generator, "modules": modules})
 
