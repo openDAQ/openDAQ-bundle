@@ -83,7 +83,16 @@ set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 # command line, as the page would, and records it for the uninstaller:
 #   opendaq-bundle-<version>-<triplet>.exe /S /PATH=AllUsers /D=C:\openDAQ        (/D last, unquoted)
 # (CPack sets CPACK_NSIS_DEFINES itself, so no FileFunc.nsh: the option is looked for in $CMDLINE by hand)
-set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
+#
+# PATH is then written by the EnVar plugin (packaging/nsis/EnVar, zlib licence), not by the template: the template
+# reads PATH into an NSIS string, 1024 characters, finds it empty when PATH is longer, and shows a message box,
+# which a silent install waits on forever (a CI runner's PATH is longer). $DO_NOT_ADD_TO_PATH is set to 1 in the
+# installer once the registry holds the choice, so the template's AddToPath is skipped; its RemoveFromPath at
+# uninstall then finds nothing left to remove.
+file(TO_NATIVE_PATH "${PROJECT_SOURCE_DIR}/packaging/nsis/EnVar" _envar)
+string(CONFIGURE [=[
+  !addplugindir /x86-ansi "@_envar@\x86-ansi"
+  !addplugindir /x86-unicode "@_envar@\x86-unicode"
   StrCpy $R1 ""
   StrCpy $R2 0
   bundle_path_scan:
@@ -122,6 +131,26 @@ set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [=[
     Push "$ADD_TO_PATH_CURRENT_USER"
     Call ConditionalAddToRegistry
   bundle_path_done:
+  StrCmp $DO_NOT_ADD_TO_PATH "1" bundle_path_added
+    StrCmp $ADD_TO_PATH_ALL_USERS "1" 0 bundle_path_add
+      EnVar::SetHKLM
+    bundle_path_add:
+    EnVar::AddValue "Path" "$INSTDIR\bin"
+    Pop $R0
+    StrCmp $R0 "0" bundle_path_template
+      DetailPrint "$INSTDIR\bin not added to PATH: EnVar error $R0"
+    bundle_path_template:
+    StrCpy $DO_NOT_ADD_TO_PATH 1
+  bundle_path_added:
+]=] CPACK_NSIS_EXTRA_INSTALL_COMMANDS @ONLY)
+set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [=[
+  StrCmp $DO_NOT_ADD_TO_PATH "1" bundle_path_removed
+    StrCmp $ADD_TO_PATH_ALL_USERS "1" 0 bundle_path_remove
+      EnVar::SetHKLM
+    bundle_path_remove:
+    EnVar::DeleteValue "Path" "$INSTDIR\bin"
+    Pop $R0
+  bundle_path_removed:
 ]=])
 
 # the layers and components, the name and the install prefix, at cpack time
