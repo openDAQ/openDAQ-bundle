@@ -3,7 +3,8 @@ name: Resolve the bundle
 # What the bundle is assembled of: a commit per layer and the platforms, and every staging laid into this run as an
 # artifact, staging-<staging>-<triplet>, for assemble.yml to build from. The commits are bundle.json's, each replaced
 # by an input that is set (a commit, or a branch or tag taken at its head now). The stagings come from the registry,
-# by staging-pull; a module's is asked for by the core it was built against too, so the modules of one bundle share
+# by staging-pull, each from the channel its commit lies in (openDAQ-CI's resolve-channel: release/** stable, main
+# dev, dev also for a commit on neither, staged by hand); a module's is asked for by the core it was built against too, so the modules of one bundle share
 # its core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed, its
 # artifacts <staging>-staging-<job>. Only OpcUaModules' stage.yml can be called so far; another layer missing fails.
 
@@ -64,7 +65,7 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
 
-      - name: Request the stagings
+      - name: Resolve the commits
         id: stagings
         shell: python3 {0}
         env:
@@ -72,7 +73,6 @@ jobs:
         run: |
           import json, os, re, subprocess, sys
 
-          REGISTRY = "ghcr.io/openDAQ/dev/staging"
           # one entry per platform the bundle is assembled for:
           #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
           #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
@@ -122,37 +122,74 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(summary) + "\n")
 
-          # every staging of every platform, by the triplet; one artifact each, optional: the check tells what is there
-          pull = []
-          for triplet in sorted({triplet for triplet, *_ in JOBS.values()}):
-              for staging, sha in revision.items():
-                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
-                  if staging != "opendaq":
-                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
-                  pull.append({"artifact": f"staging-{staging}-{triplet}",
-                               "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations, "optional": True}]})
-
           platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner, "modules": modules}
                        for job, (triplet, generator, runner, modules) in JOBS.items()]
+          # the modules' commits, by repository, for their channels
+          modules = {f"openDAQ/{REPOSITORIES[staging]}": sha for staging, sha in revision.items() if staging != "opendaq"}
 
-          outputs = {"revisions": revision, "platforms": platforms, "request": pull}
+          outputs = {"revisions": revision, "platforms": platforms, "modules": modules,
+                     "repositories": {staging: f"openDAQ/{layer}" for staging, layer in REPOSITORIES.items()}}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
                   f.write(f"{key}={json.dumps(value)}\n")
 
+      # the channel each staging is published in, by where its commit lies: the core's commit given as the commit,
+      # the modules' as what it is built against, only to learn theirs (nothing is published here)
+      - name: Resolve the channels
+        id: channel
+        uses: openDAQ/openDAQ-CI/.github/actions/resolve-channel@bundle/extract-each-artifact-into-its-dir
+        with:
+          repository: openDAQ/openDAQ
+          commit: ${{ fromJSON(steps.stagings.outputs.revisions)['opendaq'] }}
+          depends: ${{ steps.stagings.outputs.modules }}
+
+      - name: Request the stagings
+        id: request
+        shell: python3 {0}
+        env:
+          REVISIONS: ${{ steps.stagings.outputs.revisions }}
+          PLATFORMS: ${{ steps.stagings.outputs.platforms }}
+          REPOSITORIES: ${{ steps.stagings.outputs.repositories }}
+          CORE_CHANNEL: ${{ steps.channel.outputs.channel }}
+          MODULE_CHANNELS: ${{ steps.channel.outputs.depends-channels }}
+        run: |
+          import json, os
+
+          revision = json.loads(os.environ["REVISIONS"])
+          repository = json.loads(os.environ["REPOSITORIES"])
+          # a staging is looked for in its commit's channel, and in dev when it lies on no main or release/** (staged
+          # by hand)
+          channels = {"openDAQ/openDAQ": os.environ["CORE_CHANNEL"], **json.loads(os.environ["MODULE_CHANNELS"])}
+          channel = {staging: channels[repository[staging]] or "dev" for staging in revision}
+
+          # every staging of every platform, by the triplet; one artifact each, optional: the check tells what is there
+          pull = []
+          for triplet in sorted({p["triplet"] for p in json.loads(os.environ["PLATFORMS"])}):
+              for staging, sha in revision.items():
+                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
+                  if staging != "opendaq":
+                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
+                  pull.append({"artifact": f"staging-{staging}-{triplet}",
+                               "packages": [{"path": f"ghcr.io/openDAQ/{channel[staging]}/staging/{staging}",
+                                             "annotations": annotations, "optional": True}]})
+          print(json.dumps(channel, indent=2))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"request={json.dumps(pull)}\n")
+
       - name: Check the registry
         id: check
         uses: openDAQ/openDAQ-CI/.github/actions/staging-check@v4
         with:
-          packages: ${{ steps.stagings.outputs.request }}
+          packages: ${{ steps.request.outputs.request }}
 
       # a staging missing on any platform is staged here, on all of them; the rest is pulled
       - name: Split
         id: split
         shell: python3 {0}
         env:
-          REQUEST: ${{ steps.stagings.outputs.request }}
+          REQUEST: ${{ steps.request.outputs.request }}
           RESOLVED: ${{ steps.check.outputs.resolved }}
         run: |
           import json, os, sys
