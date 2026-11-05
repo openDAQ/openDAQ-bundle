@@ -4,7 +4,8 @@ name: Resolve the bundle
 # artifact, staging-<staging>-<triplet>, for assemble.yml to build from. The commits are bundle.json's, each replaced
 # by an input that is set (a commit, or a branch or tag taken at its head now). The stagings come from the registry,
 # by staging-pull; a module's is asked for by the core it was built against too, so the modules of one bundle share
-# its core. A staging the registry lacks fails the pull: it is staged first.
+# its core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed, its
+# artifacts <staging>-staging-<job>. Only OpcUaModules' stage.yml can be called so far; another layer missing fails.
 
 on:
   workflow_call:
@@ -30,6 +31,11 @@ on:
         type: string
         default: ""
     outputs:
+      artifacts:
+        description: >-
+          Each staging's artifact in this run, {job} and {triplet} for the platform's:
+          {"opendaq": "staging-opendaq-{triplet}", "opcua-modules": "opcua-modules-staging-{job}"}
+        value: ${{ jobs.resolve.outputs.artifacts }}
       revisions:
         description: "The commit of each staging's layer: a JSON object, staging → full sha"
         value: ${{ jobs.resolve.outputs.revisions }}
@@ -48,7 +54,9 @@ jobs:
     outputs:
       revisions: ${{ steps.stagings.outputs.revisions }}
       platforms: ${{ steps.stagings.outputs.platforms }}
-      staging-artifacts: ${{ steps.stagings.outputs.staging-artifacts }}
+      staging-artifacts: ${{ steps.split.outputs.staging-artifacts }}
+      missing: ${{ steps.split.outputs.missing }}
+      artifacts: ${{ steps.split.outputs.artifacts }}
     steps:
       # bundle.json of this workflow's own commit, whoever calls it
       - uses: actions/checkout@v4
@@ -114,7 +122,7 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(summary) + "\n")
 
-          # every staging of every platform, by the triplet; one artifact each
+          # every staging of every platform, by the triplet; one artifact each, optional: the check tells what is there
           pull = []
           for triplet in sorted({triplet for triplet, *_ in JOBS.values()}):
               for staging, sha in revision.items():
@@ -122,20 +130,70 @@ jobs:
                   if staging != "opendaq":
                       annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
                   pull.append({"artifact": f"staging-{staging}-{triplet}",
-                               "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+                               "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations, "optional": True}]})
 
           platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner, "modules": modules}
                        for job, (triplet, generator, runner, modules) in JOBS.items()]
 
-          outputs = {"revisions": revision, "platforms": platforms, "staging-artifacts": pull}
+          outputs = {"revisions": revision, "platforms": platforms, "request": pull}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
                   f.write(f"{key}={json.dumps(value)}\n")
 
+      - name: Check the registry
+        id: check
+        uses: openDAQ/openDAQ-CI/.github/actions/staging-check@v4
+        with:
+          packages: ${{ steps.stagings.outputs.request }}
+
+      # a staging missing on any platform is staged here, on all of them; the rest is pulled
+      - name: Split
+        id: split
+        shell: python3 {0}
+        env:
+          REQUEST: ${{ steps.stagings.outputs.request }}
+          RESOLVED: ${{ steps.check.outputs.resolved }}
+        run: |
+          import json, os, sys
+
+          # the layers whose stage.yml can be called from here
+          CALLABLE = {"opcua-modules"}
+
+          request = json.loads(os.environ["REQUEST"])
+          found = {entry["artifact"] for entry in json.loads(os.environ["RESOLVED"]) if entry["packages"]}
+          staging_of = lambda entry: entry["packages"][0]["path"].rsplit("/", 1)[1]
+          missing = sorted({staging_of(entry) for entry in request if entry["artifact"] not in found})
+          if uncallable := [staging for staging in missing if staging not in CALLABLE]:
+              sys.exit(f"::error::not in the registry, and its stage.yml cannot be called yet: {uncallable}")
+
+          pull = [{**entry, "packages": [{k: v for k, v in package.items() if k != "optional"} for package in entry["packages"]]}
+                  for entry in request if staging_of(entry) not in missing]
+          artifacts = {staging_of(entry): f"{staging_of(entry)}-staging-{{job}}" if staging_of(entry) in missing
+                       else f"staging-{staging_of(entry)}-{{triplet}}" for entry in request}
+          print(f"missing, staged here: {missing or 'none'}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"staging-artifacts={json.dumps(pull)}\n")
+              f.write(f"missing={json.dumps(missing)}\n")
+              f.write(f"artifacts={json.dumps(artifacts)}\n")
+
   pull:
     name: Pull
     needs: resolve
+    if: needs.resolve.outputs.staging-artifacts != '[]'
     uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
     with:
       staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
+
+  stage-opcua-modules:
+    name: Stage OpcUaModules
+    needs: resolve
+    if: contains(fromJSON(needs.resolve.outputs.missing), 'opcua-modules')
+    permissions:
+      contents: read
+      packages: write     # asked for by the stage.yml's push, which is never run from here
+    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stage-a-given-commit
+    with:
+      ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opcua-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}

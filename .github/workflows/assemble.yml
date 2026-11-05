@@ -1,7 +1,7 @@
 name: Assemble the bundle
 
-# The bundle's installers assembled from stagings, without compiling. The stagings are artifacts of this run,
-# staging-<staging>-<triplet>, laid in by resolve.yml. reusable.yml builds each platform as the stagings were built:
+# The bundle's installers assembled from stagings, without compiling. The stagings are artifacts of this run, laid
+# in by resolve.yml, named as it says. reusable.yml builds each platform as the stagings were built:
 # the stagings unpacked each into its own folder, given to the bundle as FETCHLAYER_PREFIX_<STAGING> (configure preset
 # bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer packed (package preset installer). Each
 # installer is then installed as a user would and smoke-checked by tests/installed.
@@ -9,6 +9,9 @@ name: Assemble the bundle
 on:
   workflow_call:
     inputs:
+      artifacts:
+        description: "Each staging's artifact, {job} and {triplet} for the platform's (resolve.yml's)"
+        type: string
       revisions:
         description: "The commit of each staging's layer: a JSON object, staging → full sha (resolve.yml's)"
         type: string
@@ -34,6 +37,7 @@ jobs:
         id: plan
         shell: python3 {0}
         env:
+          ARTIFACTS: ${{ inputs.artifacts }}
           REVISIONS: ${{ inputs.revisions }}
           PLATFORMS: ${{ inputs.platforms }}
         run: |
@@ -43,6 +47,7 @@ jobs:
           REPOSITORIES = {"opendaq": "openDAQ", "opcua-modules": "OpcUaModules", "mqtt-module": "MQTTStreamingModule",
                           "lt-streaming-modules": "LTStreamingModulesModern", "asam-cmp-modules": "ASAM-CMP-Modules"}
           revision = json.loads(os.environ["REVISIONS"])
+          artifact = json.loads(os.environ["ARTIFACTS"])
           platforms = json.loads(os.environ["PLATFORMS"])
 
           packages, cmake_presets, cpack_presets, checks = [], [], [], []
@@ -52,7 +57,8 @@ jobs:
               artifacts = []
               cache_variables = {f"BUNDLE_REVISION_{REPOSITORIES[staging].upper()}": sha for staging, sha in revision.items()}
               for staging in revision:
-                  artifacts.append({"name": f"staging-{staging}-{p['triplet']}", "dir": f"stagings/{staging}"})
+                  name = artifact[staging].replace("{job}", job).replace("{triplet}", p["triplet"])
+                  artifacts.append({"name": name, "dir": f"stagings/{staging}"})
                   # the core's tarball carries its install prefix, opt/opendaq, except on Windows
                   inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
                   cache_variables[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside

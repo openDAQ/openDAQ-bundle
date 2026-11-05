@@ -58,6 +58,9 @@ permissions:
 jobs:
   resolve:
     name: Resolve
+    permissions:
+      contents: read
+      packages: write     # a missing staging's stage.yml asks for it; nothing is pushed from here
     uses: ./.github/workflows/resolve.yml
     with:
       opendaq: ${{ inputs.opendaq }}
@@ -71,5 +74,6 @@ jobs:
     needs: resolve
     uses: ./.github/workflows/assemble.yml
     with:
+      artifacts: ${{ needs.resolve.outputs.artifacts }}
       revisions: ${{ needs.resolve.outputs.revisions }}
       platforms: ${{ needs.resolve.outputs.platforms }}
