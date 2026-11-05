@@ -27,10 +27,6 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
-      runs:
-        description: 'Stagings staged in another run, not pulled: {"opcua-modules": {"repository": "openDAQ/OpcUaModules", "run-id": 1}}'
-        type: string
-        default: "{}"
   workflow_call:
     inputs:
       opendaq:
@@ -53,16 +49,11 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
-      runs:
-        description: 'Stagings staged in another run, not pulled: {"opcua-modules": {"repository": "openDAQ/OpcUaModules", "run-id": 1}}'
-        type: string
-        default: "{}"
   pull_request:
 
 permissions:
   contents: read
   packages: read
-  actions: read
 
 jobs:
   resolve:
@@ -74,7 +65,6 @@ jobs:
       mqtt-module: ${{ inputs.mqtt-module }}
       lt-streaming-modules: ${{ inputs.lt-streaming-modules }}
       asam-cmp-modules: ${{ inputs.asam-cmp-modules }}
-      runs: ${{ inputs.runs || '{}' }}
 
   assemble:
     name: Assemble
