@@ -4,7 +4,8 @@ name: Resolve the bundle
 # artifact, staging-<staging>-<triplet>, for assemble.yml to build from. The commits are bundle.json's, each replaced
 # by an input that is set (a commit, or a branch or tag taken at its head now). The stagings come from the registry,
 # by staging-pull; a module's is asked for by the core it was built against too, so the modules of one bundle share
-# its core. A staging the registry lacks fails the pull: it is staged first.
+# its core. A staging the registry lacks fails the pull: it is staged first. A staging staged in another run (`runs`)
+# is taken from that run's artifacts, staging-<job>/<part>, its jobs named as the bundle's, instead of the registry.
 
 on:
   workflow_call:
@@ -29,6 +30,12 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
+      runs:
+        description: >-
+          Stagings staged in another run, not pulled: a JSON object, staging → its run, e.g.
+          {"opcua-modules": {"repository": "openDAQ/OpcUaModules", "run-id": 41985123853}}
+        type: string
+        default: "{}"
     outputs:
       revisions:
         description: "The commit of each staging's layer: a JSON object, staging → full sha"
@@ -40,6 +47,7 @@ on:
 permissions:
   contents: read
   packages: read
+  actions: read
 
 jobs:
   resolve:
@@ -49,6 +57,7 @@ jobs:
       revisions: ${{ steps.stagings.outputs.revisions }}
       platforms: ${{ steps.stagings.outputs.platforms }}
       staging-artifacts: ${{ steps.stagings.outputs.staging-artifacts }}
+      fetch: ${{ steps.stagings.outputs.fetch }}
     steps:
       # bundle.json of this workflow's own commit, whoever calls it
       - uses: actions/checkout@v4
@@ -85,8 +94,14 @@ jobs:
           STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
                       "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
           REPOSITORIES = {staging: layer for layer, staging in STAGINGS.items()}
+          # a staging → the folder its stage.yml packs it into, in the artifact staging-<job>
+          PARTS = {"opendaq": "core", "opcua-modules": "opcua", "mqtt-module": "mqtt",
+                   "lt-streaming-modules": "lt-streaming", "asam-cmp-modules": "asam-cmp"}
 
           inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
+          runs = json.loads(inputs.get("runs") or "{}")
+          if unknown := set(runs) - set(REPOSITORIES):
+              sys.exit(f"::error::runs names no staging of the bundle: {sorted(unknown)}")
 
           def commit(staging, ref):
               """A full sha as it is; a branch or a tag → its commit, as the repository has it now."""
@@ -107,17 +122,24 @@ jobs:
               given = (inputs.get(staging) or "").strip()
               revision[staging] = commit(staging, given or ref)
 
-          summary = ["| Staging | Revision |", "|-|-|"]
+          summary = ["| Staging | Revision | From |", "|-|-|-|"]
           for staging, sha in revision.items():
-              summary.append(f"| {staging} | [`{sha[:12]}`](https://github.com/openDAQ/{REPOSITORIES[staging]}/commit/{sha}) |")
+              run = runs.get(staging)
+              source = f"[run {run['run-id']}](https://github.com/{run['repository']}/actions/runs/{run['run-id']})" if run else "ghcr"
+              summary.append(f"| {staging} | [`{sha[:12]}`](https://github.com/openDAQ/{REPOSITORIES[staging]}/commit/{sha}) | {source} |")
           print("\n".join(summary))
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(summary) + "\n")
 
-          # every staging of every platform, by the triplet; one artifact each
+          # every staging of every platform, one artifact each: from another run, or else from the registry by the triplet
+          fetch = [{"staging": staging, "repository": run["repository"], "run-id": run["run-id"], "job": job,
+                    "part": PARTS[staging], "artifact": f"staging-{staging}-{triplet}"}
+                   for staging, run in runs.items() for job, (triplet, *_) in JOBS.items()]
           pull = []
           for triplet in sorted({triplet for triplet, *_ in JOBS.values()}):
               for staging, sha in revision.items():
+                  if staging in runs:
+                      continue
                   annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
                   if staging != "opendaq":
                       annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
@@ -127,7 +149,7 @@ jobs:
           platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner, "modules": modules}
                        for job, (triplet, generator, runner, modules) in JOBS.items()]
 
-          outputs = {"revisions": revision, "platforms": platforms, "staging-artifacts": pull}
+          outputs = {"revisions": revision, "platforms": platforms, "staging-artifacts": pull, "fetch": fetch}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
@@ -136,6 +158,33 @@ jobs:
   pull:
     name: Pull
     needs: resolve
+    if: needs.resolve.outputs.staging-artifacts != '[]'
     uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
     with:
       staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
+
+  # a staging of another run, renamed as the pulled ones are
+  fetch:
+    name: Fetch ${{ matrix.fetch.artifact }}
+    needs: resolve
+    if: needs.resolve.outputs.fetch != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    strategy:
+      matrix:
+        fetch: ${{ fromJSON(needs.resolve.outputs.fetch) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-${{ matrix.fetch.job }}
+          repository: ${{ matrix.fetch.repository }}
+          run-id: ${{ matrix.fetch.run-id }}
+          github-token: ${{ github.token }}
+          path: fetched
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.fetch.artifact }}
+          path: fetched/${{ matrix.fetch.part }}/
+          if-no-files-found: error
