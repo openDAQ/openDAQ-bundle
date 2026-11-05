@@ -1,0 +1,141 @@
+name: Resolve the bundle
+
+# What the bundle is assembled of: a commit per layer and the platforms, and every staging laid into this run as an
+# artifact, staging-<staging>-<triplet>, for assemble.yml to build from. The commits are bundle.json's, each replaced
+# by an input that is set (a commit, or a branch or tag taken at its head now). The stagings come from the registry,
+# by staging-pull; a module's is asked for by the core it was built against too, so the modules of one bundle share
+# its core. A staging the registry lacks fails the pull: it is staged first.
+
+on:
+  workflow_call:
+    inputs:
+      opendaq:
+        description: "openDAQ: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      opcua-modules:
+        description: "OpcUaModules: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      mqtt-module:
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      lt-streaming-modules:
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      asam-cmp-modules:
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+    outputs:
+      revisions:
+        description: "The commit of each staging's layer: a JSON object, staging → full sha"
+        value: ${{ jobs.resolve.outputs.revisions }}
+      platforms:
+        description: "The platforms: a JSON list of {job, triplet, generator, runner, modules}"
+        value: ${{ jobs.resolve.outputs.platforms }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  resolve:
+    name: Resolve the stagings
+    runs-on: ubuntu-latest
+    outputs:
+      revisions: ${{ steps.stagings.outputs.revisions }}
+      platforms: ${{ steps.stagings.outputs.platforms }}
+      staging-artifacts: ${{ steps.stagings.outputs.staging-artifacts }}
+    steps:
+      # bundle.json of this workflow's own commit, whoever calls it
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+
+      - name: Request the stagings
+        id: stagings
+        shell: python3 {0}
+        env:
+          INPUTS: ${{ toJSON(inputs) }}
+        run: |
+          import json, os, re, subprocess, sys
+
+          REGISTRY = "ghcr.io/openDAQ/dev/staging"
+          # one entry per platform the bundle is assembled for:
+          #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
+          #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
+          #   generator  the CPack generator of its installer
+          #   runner     where the installer is installed and smoke-checked (tests/installed)
+          #   modules    how many modules the smoke check expects to load (Windows: ASAM's two need Npcap, absent)
+          # runner and modules serve the smoke check, a debugging aid until the integration tests take the installers;
+          # they go with it
+          JOBS = {
+              # job                                          triplet                                 generator       runner              modules
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04",     14),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm", 14),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022",     12),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
+          }
+          # a layer, named as its repository in bundle.json → its staging
+          STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
+                      "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
+          REPOSITORIES = {staging: layer for layer, staging in STAGINGS.items()}
+
+          inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
+
+          def commit(staging, ref):
+              """A full sha as it is; a branch or a tag → its commit, as the repository has it now."""
+              if re.fullmatch(r"[0-9a-f]{40}", ref):
+                  return ref
+              url = f"https://github.com/openDAQ/{REPOSITORIES[staging]}.git"
+              out = subprocess.run(["git", "ls-remote", url, ref], capture_output=True, text=True, check=True).stdout
+              refs = dict(reversed(line.split("\t")) for line in out.splitlines())
+              for name in (f"refs/tags/{ref}^{{}}", f"refs/tags/{ref}", f"refs/heads/{ref}"):
+                  if name in refs:
+                      return refs[name]
+              sys.exit(f"::error::{REPOSITORIES[staging]} has no branch or tag {ref!r} (a commit is given in full)")
+
+          # bundle.json's revisions, each replaced by an input that is set
+          revision = {}
+          for layer, ref in json.load(open("bundle.json")).items():
+              staging = STAGINGS[layer]
+              given = (inputs.get(staging) or "").strip()
+              revision[staging] = commit(staging, given or ref)
+
+          summary = ["| Staging | Revision |", "|-|-|"]
+          for staging, sha in revision.items():
+              summary.append(f"| {staging} | [`{sha[:12]}`](https://github.com/openDAQ/{REPOSITORIES[staging]}/commit/{sha}) |")
+          print("\n".join(summary))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(summary) + "\n")
+
+          # every staging of every platform, by the triplet; one artifact each
+          pull = []
+          for triplet in sorted({triplet for triplet, *_ in JOBS.values()}):
+              for staging, sha in revision.items():
+                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
+                  if staging != "opendaq":
+                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
+                  pull.append({"artifact": f"staging-{staging}-{triplet}",
+                               "packages": [{"path": f"{REGISTRY}/{staging}", "annotations": annotations}]})
+
+          platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner, "modules": modules}
+                       for job, (triplet, generator, runner, modules) in JOBS.items()]
+
+          outputs = {"revisions": revision, "platforms": platforms, "staging-artifacts": pull}
+          print(json.dumps(outputs, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for key, value in outputs.items():
+                  f.write(f"{key}={json.dumps(value)}\n")
+
+  pull:
+    name: Pull
+    needs: resolve
+    uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
+    with:
+      staging-artifacts: ${{ needs.resolve.outputs.staging-artifacts }}
