@@ -74,6 +74,5 @@ jobs:
     needs: resolve
     uses: ./.github/workflows/assemble.yml
     with:
-      artifacts: ${{ needs.resolve.outputs.artifacts }}
       revisions: ${{ needs.resolve.outputs.revisions }}
       platforms: ${{ needs.resolve.outputs.platforms }}
