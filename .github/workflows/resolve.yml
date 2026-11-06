@@ -7,7 +7,7 @@ name: Resolve the bundle
 # resolve-channel: release/** stable, main dev, dev also for a commit on neither, staged by hand); a module's is asked
 # for by the core it was built against too, so the modules of one bundle share its core. A staging the registry lacks
 # is staged here by its layer's stage.yml, called, never pushed; a module after the core is in the run, which its
-# stage then does not pull again. Only openDAQ's and OpcUaModules' stage.yml can be called so far.
+# stage then does not pull again.
 
 on:
   workflow_call:
@@ -189,17 +189,12 @@ jobs:
           REQUEST: ${{ steps.request.outputs.request }}
           RESOLVED: ${{ steps.check.outputs.resolved }}
         run: |
-          import json, os, sys
-
-          # the layers whose stage.yml can be called from here
-          CALLABLE = {"opendaq", "opcua-modules"}
+          import json, os
 
           request = json.loads(os.environ["REQUEST"])
           found = {entry["artifact"] for entry in json.loads(os.environ["RESOLVED"]) if entry["packages"]}
           staging_of = lambda entry: entry["packages"][0]["path"].rsplit("/", 1)[1]
           missing = sorted({staging_of(entry) for entry in request if entry["artifact"] not in found})
-          if uncallable := [staging for staging in missing if staging not in CALLABLE]:
-              sys.exit(f"::error::not in the registry, and its stage.yml cannot be called yet: {uncallable}")
 
           pull = [{**entry, "packages": [{k: v for k, v in package.items() if k != "optional"} for package in entry["packages"]]}
                   for entry in request if staging_of(entry) not in missing]
@@ -243,4 +238,52 @@ jobs:
     uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opcua-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+
+  stage-mqtt-module:
+    name: Stage MQTTStreamingModule
+    needs: [resolve, pull, stage-opendaq]
+    if: >-
+      always() && needs.resolve.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.resolve.outputs.missing), 'mqtt-module')
+    permissions:
+      contents: read
+      packages: write     # asked for by the stage.yml's push, which is never run from here
+    uses: openDAQ/MQTTStreamingModule/.github/workflows/stage.yml@bundle/stagings
+    with:
+      ref: ${{ fromJSON(needs.resolve.outputs.revisions)['mqtt-module'] }}
+      opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+
+  stage-lt-streaming-modules:
+    name: Stage LTStreamingModulesModern
+    needs: [resolve, pull, stage-opendaq]
+    if: >-
+      always() && needs.resolve.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.resolve.outputs.missing), 'lt-streaming-modules')
+    permissions:
+      contents: read
+      packages: write     # asked for by the stage.yml's push, which is never run from here
+    uses: openDAQ/LTStreamingModulesModern/.github/workflows/stage.yml@bundle/stagings
+    with:
+      ref: ${{ fromJSON(needs.resolve.outputs.revisions)['lt-streaming-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+
+  stage-asam-cmp-modules:
+    name: Stage ASAM-CMP-Modules
+    needs: [resolve, pull, stage-opendaq]
+    if: >-
+      always() && needs.resolve.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.resolve.outputs.missing), 'asam-cmp-modules')
+    permissions:
+      contents: read
+      packages: write     # asked for by the stage.yml's push, which is never run from here
+    uses: openDAQ/ASAM-CMP-Modules/.github/workflows/stage.yml@bundle/stagings
+    with:
+      ref: ${{ fromJSON(needs.resolve.outputs.revisions)['asam-cmp-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
