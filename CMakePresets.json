@@ -1,5 +1,5 @@
 {
-    "version": 4,
+    "version": 6,
     "configurePresets": [
         {
             "name": "debug",
@@ -101,6 +101,29 @@
             ]
         },
         {
+            "name": "bundle-prefixes",
+            "displayName": "Bundle from stagings given as prefixes (FETCHLAYER_PREFIX_<STAGING>), nothing compiled; CI",
+            "inherits": [
+                "release"
+            ],
+            "cacheVariables": {
+                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "FETCHLAYER_BUILD": "NEVER"
+            }
+        },
+        {
+            "name": "bundle-native",
+            "displayName": "Bundle by FetchLayer, this machine's triplet",
+            "inherits": [
+                "release",
+                "ninja"
+            ],
+            "cacheVariables": {
+                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "FETCHLAYER_STORE": "${sourceDir}/build/store"
+            }
+        },
+        {
             "name": "x64/msvc-17",
             "displayName": "[MSVC 17] Release - x64",
             "inherits": [
@@ -162,6 +185,50 @@
                 "clang",
                 "ninja"
             ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "bundle-native",
+            "configurePreset": "bundle-native"
+        }
+    ],
+    "packagePresets": [
+        {
+            "name": "core",
+            "displayName": "The core: runtime, C++ API, C",
+            "configurePreset": "bundle-native",
+            "generators": [
+                "TGZ"
+            ],
+            "variables": {
+                "BUNDLE_PACK_STAGINGS": "opendaq",
+                "BUNDLE_PACK_COMPONENTS": "Runtime;Development",
+                "CPACK_OPENDAQ_META_PACKAGE_NAME": "opendaq-core"
+            }
+        },
+        {
+            "name": "installer",
+            "displayName": "The core with the modules, the modules optional where the generator offers choices (-G DEB, NSIS, productbuild)",
+            "configurePreset": "bundle-native",
+            "variables": {
+                "BUNDLE_PACK_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "BUNDLE_PACK_COMPONENTS": "Runtime;Development",
+                "CPACK_OPENDAQ_META_PACKAGE_NAME": "opendaq-bundle"
+            }
+        },
+        {
+            "name": "modules",
+            "displayName": "The modules, without the core",
+            "configurePreset": "bundle-native",
+            "generators": [
+                "TGZ"
+            ],
+            "variables": {
+                "BUNDLE_PACK_STAGINGS": "opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "BUNDLE_PACK_COMPONENTS": "Runtime",
+                "CPACK_OPENDAQ_META_PACKAGE_NAME": "opendaq-modules"
+            }
         }
     ]
 }
