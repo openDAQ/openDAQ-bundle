@@ -51,6 +51,7 @@ jobs:
     outputs:
       revisions: ${{ steps.stagings.outputs.revisions }}
       platforms: ${{ steps.stagings.outputs.platforms }}
+      exclude-jobs: ${{ steps.stagings.outputs.exclude-jobs }}
       staging-artifacts: ${{ steps.split.outputs.staging-artifacts }}
       missing: ${{ steps.split.outputs.missing }}
     steps:
@@ -84,6 +85,8 @@ jobs:
               "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
               "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
           }
+          # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here
+          EXCLUDE_JOBS = ["manylinux*", "windows-*-x86-*"]
           # a layer, named as its repository in bundle.json → its staging
           STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
                       "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
@@ -122,7 +125,7 @@ jobs:
           # the modules' commits, by repository, for their channels
           modules = {f"openDAQ/{REPOSITORIES[staging]}": sha for staging, sha in revision.items() if staging != "opendaq"}
 
-          outputs = {"revisions": revision, "platforms": platforms, "modules": modules,
+          outputs = {"revisions": revision, "platforms": platforms, "modules": modules, "exclude-jobs": EXCLUDE_JOBS,
                      "repositories": {staging: f"openDAQ/{layer}" for staging, layer in REPOSITORIES.items()}}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -222,6 +225,7 @@ jobs:
     uses: openDAQ/openDAQ/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.resolve.outputs.exclude-jobs }}
 
   # after the core is in the run, pulled or staged, so the module's stage does not pull it again
   stage-opcua-modules:
@@ -239,6 +243,7 @@ jobs:
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opcua-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.resolve.outputs.exclude-jobs }}
 
   stage-mqtt-module:
     name: Stage MQTTStreamingModule
@@ -255,6 +260,7 @@ jobs:
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['mqtt-module'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.resolve.outputs.exclude-jobs }}
 
   stage-lt-streaming-modules:
     name: Stage LTStreamingModulesModern
@@ -271,6 +277,7 @@ jobs:
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['lt-streaming-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.resolve.outputs.exclude-jobs }}
 
   stage-asam-cmp-modules:
     name: Stage ASAM-CMP-Modules
@@ -287,3 +294,4 @@ jobs:
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['asam-cmp-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.resolve.outputs.exclude-jobs }}
