@@ -1,7 +1,7 @@
 {
     "openDAQ": "1a82fa899b78e23ddcf61975eb9255b22e713808",
-    "OpcUaModules": "a81d246e59e9da366b5c675144764ff1495faf85",
-    "MQTTStreamingModule": "980eeff8904f13195eb851e2bd666f91165f4ca0",
+    "OpcUaModules": "485710c37d06bcc6b6c852e57fd27c0b2cce7d08",
+    "MQTTStreamingModule": "3a55f4bf710ca10513ed64464e74680246e35e9f",
     "LTStreamingModulesModern": "322d770b08e033eb6033d417c2310fdb832e088a",
     "ASAM-CMP-Modules": "a95b8cea31cca2c5e437c7e55d38bc9efc7703a6"
 }
