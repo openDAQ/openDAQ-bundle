@@ -9,7 +9,10 @@
 
 include_guard(GLOBAL)
 
-set(BUNDLE_VERSION "${PROJECT_VERSION}" CACHE STRING "Version of the bundle, the version of its packages")
+set(BUNDLE_VERSION "" CACHE STRING "Version of the bundle, the version of its packages; empty: bundle.json's")
+if (NOT BUNDLE_VERSION)
+    set(BUNDLE_VERSION "${PROJECT_VERSION}")
+endif()
 
 # each staging's install components, of this build's own variant, by what they are for: Runtime when the name
 # says so, Development else — prebuilt, <staging>_Runtime/_Development; from sources, the names the layer gave

@@ -1,7 +1,10 @@
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 cmake_minimum_required(VERSION 3.25)
 
-project(openDAQ-bundle VERSION 1.0.0 LANGUAGES CXX)
+# the bundle's version, bundle.json's: the version of its packages and installers
+file(READ "${CMAKE_CURRENT_LIST_DIR}/bundle.json" _bundle)
+string(JSON _bundle_version GET "${_bundle}" version)
+project(openDAQ-bundle VERSION ${_bundle_version} LANGUAGES CXX)
 
 # The bundle: the stagings named, each from where the policy says — prebuilt from the store, or built from its
 # layer's sources (cmake/FetchLayer.cmake). What the bundle is made of is cmake/Layers.cmake; how it is packed,

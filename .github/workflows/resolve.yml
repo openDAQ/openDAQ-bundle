@@ -108,7 +108,7 @@ jobs:
 
           # bundle.json's revisions, each replaced by an input that is set
           revision = {}
-          for layer, ref in json.load(open("bundle.json")).items():
+          for layer, ref in json.load(open("bundle.json"))["layers"].items():
               staging = STAGINGS[layer]
               given = (inputs.get(staging) or "").strip()
               revision[staging] = commit(staging, given or ref)

@@ -38,7 +38,7 @@ foreach(_layer openDAQ OpcUaModules MQTTStreamingModule LTStreamingModulesModern
     string(TOUPPER "${_layer}" _upper)
     set(BUNDLE_REVISION_${_upper} "" CACHE STRING "The revision of ${_layer}: a full sha, a tag or a branch; empty: bundle.json's")
     if (NOT BUNDLE_REVISION_${_upper})
-        string(JSON BUNDLE_REVISION_${_upper} ERROR_VARIABLE _error GET "${_bundle}" "${_layer}")
+        string(JSON BUNDLE_REVISION_${_upper} ERROR_VARIABLE _error GET "${_bundle}" layers "${_layer}")
         if (_error)
             message(FATAL_ERROR "bundle.json names no revision of ${_layer}: ${_error}")
         endif()
