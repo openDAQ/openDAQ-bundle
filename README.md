@@ -84,6 +84,16 @@ cmake --preset bundle-native -DFETCHLAYER_BUILD_OPCUAMODULES=ALWAYS     # OPC UA
 
 ## Prebuilt stagings
 
+The stagings are read from ghcr by [oras](https://oras.land/docs/installation), which needs a login even to read:
+a GitHub token with `read:packages`, e.g. the GitHub CLI's:
+
+```bash
+gh auth refresh -h github.com -s read:packages
+gh auth token | oras login ghcr.io -u <github user> --password-stdin
+```
+
+`oras login` keeps the token in `~/.docker/config.json`; another file is passed as `-DORAS_REGISTRY_CONFIG=`.
+
 The store is filled from the registry once, for the revisions `bundle-native` pins (see `CMakePresets.json`):
 
 ```bash
