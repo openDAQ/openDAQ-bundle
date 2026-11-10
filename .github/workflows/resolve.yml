@@ -237,7 +237,7 @@ jobs:
     permissions:
       contents: read
       packages: write     # asked for by the stage.yml's push, which is never run from here
-    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings-no-werror
     with:
       ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opcua-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.resolve.outputs.revisions)['opendaq'] }}
