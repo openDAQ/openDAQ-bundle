@@ -128,7 +128,7 @@ jobs:
         run: |
           cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }}
           cmake --build build/installed --config Release
-          ctest --test-dir build/installed -C Release --output-on-failure
+          ctest --test-dir build/installed -C Release --verbose      # each module loaded, by its id
 
       # the installer added its bin to the machine's PATH, and the uninstaller removes it
       - name: PATH
