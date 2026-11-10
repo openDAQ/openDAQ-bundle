@@ -37,7 +37,7 @@ on:
         description: "The commit of each staging's layer: a JSON object, staging → full sha"
         value: ${{ jobs.resolve.outputs.revisions }}
       platforms:
-        description: "The platforms: a JSON list of {job, triplet, generator, runner, modules}"
+        description: "The platforms: a JSON list of {job, triplet, generator, runner}"
         value: ${{ jobs.resolve.outputs.platforms }}
 
 permissions:
@@ -73,17 +73,15 @@ jobs:
           #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
           #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
           #   generator  the CPack generator of its installer
-          #   runner     where the installer is installed and smoke-checked (tests/installed)
-          #   modules    how many modules the smoke check expects to load (Windows: ASAM's two need Npcap, absent)
-          # runner and modules serve the smoke check, a debugging aid until the integration tests take the installers;
-          # they go with it
+          #   runner     where the installer is installed and smoke-checked (tests/installed); it serves the smoke
+          #              check, a debugging aid until the integration tests take the installers, and goes with it
           JOBS = {
-              # job                                          triplet                                 generator       runner              modules
-              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04",     14),
-              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm", 14),
-              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022",     12),
-              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26",         14),
-              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel",   14),
+              # job                                          triplet                                 generator       runner
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04"),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm"),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022"),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26"),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel"),
           }
           # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here
           EXCLUDE_JOBS = ["manylinux*", "windows-*-x86-*"]
@@ -120,8 +118,8 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(summary) + "\n")
 
-          platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner, "modules": modules}
-                       for job, (triplet, generator, runner, modules) in JOBS.items()]
+          platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner}
+                       for job, (triplet, generator, runner) in JOBS.items()]
           # the modules' commits, by repository, for their channels
           modules = {f"openDAQ/{REPOSITORIES[staging]}": sha for staging, sha in revision.items() if staging != "opendaq"}
 

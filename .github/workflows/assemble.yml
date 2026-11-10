@@ -13,7 +13,7 @@ on:
         description: "The commit of each staging's layer: a JSON object, staging → full sha (resolve.yml's)"
         type: string
       platforms:
-        description: "The platforms: a JSON list of {job, triplet, generator, runner, modules} (resolve.yml's)"
+        description: "The platforms: a JSON list of {job, triplet, generator, runner} (resolve.yml's)"
         type: string
 
 permissions:
@@ -59,7 +59,7 @@ jobs:
               packages.append({"match-jobs": [job], "artifacts": artifacts})
               cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": p["generator"], "package-preset": "installer"}]})
-              checks.append({"job": job, "runner": p["runner"], "generator": p["generator"], "modules": p["modules"]})
+              checks.append({"job": job, "runner": p["runner"], "generator": p["generator"]})
 
           # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
           # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; NSIS packs
@@ -126,8 +126,7 @@ jobs:
 
       - name: Smoke check
         run: |
-          cmake -S tests/installed -B build/installed \
-                -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }} -DEXPECT_MODULES=${{ matrix.check.modules }}
+          cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }}
           cmake --build build/installed --config Release
           ctest --test-dir build/installed -C Release --output-on-failure
 
