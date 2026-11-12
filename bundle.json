@@ -1,0 +1,10 @@
+{
+    "version": "2026.11.0",
+    "layers": {
+        "openDAQ": "1a82fa899b78e23ddcf61975eb9255b22e713808",
+        "OpcUaModules": "5cfded5f006a11131743901e3befa276d6efe14b",
+        "MQTTStreamingModule": "a94532cf583624e6c28d3626a2b56cf5d8378966",
+        "LTStreamingModulesModern": "cd5262365f34556c4a170f285b6a0fb43db6b835",
+        "ASAM-CMP-Modules": "94476536c44e596b41985555c56043eb4852d10f"
+    }
+}

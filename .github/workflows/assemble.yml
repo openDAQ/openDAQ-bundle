@@ -1,0 +1,146 @@
+name: Assemble the bundle
+
+# The bundle's installers assembled from stagings, without compiling. The stagings are artifacts of this run, laid
+# in by resolve.yml, <staging>-staging-<job>. reusable.yml builds each platform as the stagings were built:
+# the stagings unpacked each into its own folder, given to the bundle as BUNDLE_PREFIX_<STAGING> (configure preset
+# bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer packed (package preset installer). Each
+# installer is then installed as a user would and smoke-checked by tests/installed.
+
+on:
+  workflow_call:
+    inputs:
+      revisions:
+        description: "The commit of each staging's layer: a JSON object, staging → full sha (resolve.yml's)"
+        type: string
+      platforms:
+        description: "The platforms: a JSON list of {job, triplet, generator, runner} (resolve.yml's)"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan the build
+    runs-on: ubuntu-latest
+    outputs:
+      jobs: ${{ steps.plan.outputs.jobs }}
+      packages: ${{ steps.plan.outputs.packages }}
+      cmake-presets: ${{ steps.plan.outputs.cmake-presets }}
+      cpack-presets: ${{ steps.plan.outputs.cpack-presets }}
+      checks: ${{ steps.plan.outputs.checks }}
+    steps:
+      - name: Plan
+        id: plan
+        shell: python3 {0}
+        env:
+          REVISIONS: ${{ inputs.revisions }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          import json, os
+
+          # a staging → its layer, named as its repository (BUNDLE_REVISION_<LAYER>)
+          REPOSITORIES = {"opendaq": "openDAQ", "opcua-modules": "OpcUaModules", "mqtt-module": "MQTTStreamingModule",
+                          "lt-streaming-modules": "LTStreamingModulesModern", "asam-cmp-modules": "ASAM-CMP-Modules"}
+          revision = json.loads(os.environ["REVISIONS"])
+          platforms = json.loads(os.environ["PLATFORMS"])
+
+          packages, cmake_presets, cpack_presets, checks = [], [], [], []
+          for p in platforms:
+              job = p["job"]
+              # the commits resolved there, so configure takes the same ones and resolves no ref again
+              artifacts = []
+              cache_variables = {f"BUNDLE_REVISION_{REPOSITORIES[staging].upper()}": sha for staging, sha in revision.items()}
+              cache_variables["BUNDLE_STAGINGS"] = ";".join(revision)        # the stagings resolve.yml kept
+              for staging in revision:
+                  artifacts.append({"name": f"{staging}-staging-{job}", "dir": f"stagings/{staging}"})
+                  # the core's tarball carries its install prefix, opt/opendaq, except on Windows
+                  inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
+                  cache_variables[f"BUNDLE_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
+              packages.append({"match-jobs": [job], "artifacts": artifacts})
+              cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
+              cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": p["generator"], "package-preset": "installer"}]})
+              checks.append({"job": job, "runner": p["runner"], "generator": p["generator"]})
+
+          # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
+          # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; NSIS packs
+          packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8", "libx11-6",
+                         "libxrandr2", "libxcursor1", "libxi6", "libgl1", "libudev1", "libfreetype6", "libssl3"]},
+                       {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
+
+          outputs = {"jobs": [p["job"] for p in platforms], "packages": packages,
+                     "cmake-presets": cmake_presets, "cpack-presets": cpack_presets, "checks": checks}
+          print(json.dumps(outputs, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for key, value in outputs.items():
+                  f.write(f"{key}={json.dumps(value)}\n")
+
+  build:
+    name: Build
+    needs: plan
+    uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@bundle/extract-each-artifact-into-its-dir
+    with:
+      include-jobs: ${{ needs.plan.outputs.jobs }}
+      packages: ${{ needs.plan.outputs.packages }}
+      cmake-presets: ${{ needs.plan.outputs.cmake-presets }}
+      cpack-presets: ${{ needs.plan.outputs.cpack-presets }}
+
+  # installed as a user would, everything selected, and smoke-checked
+  check:
+    name: Check ${{ matrix.check.job }}
+    needs: [plan, build]
+    runs-on: ${{ matrix.check.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJSON(needs.plan.outputs.checks) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-${{ matrix.check.job }}
+          path: installer
+
+      - name: Install
+        id: install
+        timeout-minutes: 10
+        run: |
+          find installer -type f
+          case "${{ matrix.check.generator }}" in
+            DEB)          sudo apt-get update -qq
+                          sudo apt-get install -y -qq "$(find "$PWD/installer" -name '*.deb' | head -1)"
+                          echo "prefix=/opt/opendaq" >> "$GITHUB_OUTPUT" ;;
+            productbuild) sudo installer -pkg "$(find installer -name '*.pkg' | head -1)" -target /
+                          echo "prefix=/opt/opendaq" >> "$GITHUB_OUTPUT" ;;
+            NSIS)         exe=$(cygpath -w "$(find installer -name '*.exe' | head -1)")
+                          pwsh -Command 'Write-Host "PATH: $($env:Path.Length) characters (the template reads 1024)"'
+                          pwsh -Command "Start-Process -Wait -FilePath '$exe' -ArgumentList '/S','/PATH=AllUsers','/D=C:\opendaq'"
+                          echo "prefix=C:/opendaq" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Smoke check
+        run: |
+          cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }}
+          cmake --build build/installed --config Release
+          ctest --test-dir build/installed -C Release --verbose      # each module loaded, by its id
+
+      # the installer added its bin to the machine's PATH, and the uninstaller removes it
+      - name: PATH
+        if: matrix.check.generator == 'NSIS'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $bin = 'C:\opendaq\bin'
+          $has = { ([Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';') -contains $bin }
+          Write-Host "after install, machine PATH has ${bin}: $(& $has)"
+          if (-not (& $has)) { exit 1 }
+          Start-Process -Wait -FilePath 'C:\opendaq\Uninstall.exe' -ArgumentList '/S','_?=C:\opendaq'
+          Write-Host "after uninstall, machine PATH has ${bin}: $(& $has)"
+          if (& $has) { exit 1 }
