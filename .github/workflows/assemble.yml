@@ -2,7 +2,7 @@ name: Assemble the bundle
 
 # The bundle's installers assembled from stagings, without compiling. The stagings are artifacts of this run, laid
 # in by resolve.yml, <staging>-staging-<job>. reusable.yml builds each platform as the stagings were built:
-# the stagings unpacked each into its own folder, given to the bundle as FETCHLAYER_PREFIX_<STAGING> (configure preset
+# the stagings unpacked each into its own folder, given to the bundle as BUNDLE_PREFIX_<STAGING> (configure preset
 # bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer packed (package preset installer). Each
 # installer is then installed as a user would and smoke-checked by tests/installed.
 
@@ -55,7 +55,7 @@ jobs:
                   artifacts.append({"name": f"{staging}-staging-{job}", "dir": f"stagings/{staging}"})
                   # the core's tarball carries its install prefix, opt/opendaq, except on Windows
                   inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
-                  cache_variables[f"FETCHLAYER_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
+                  cache_variables[f"BUNDLE_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
               packages.append({"match-jobs": [job], "artifacts": artifacts})
               cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": p["generator"], "package-preset": "installer"}]})
