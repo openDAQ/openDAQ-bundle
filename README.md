@@ -11,7 +11,8 @@ its **staging**: `opendaq`, `opcua-modules`, `mqtt-module`, `lt-streaming-module
 builds every layer from its sources in one tree, fetched with CMake's `FetchContent`, or takes every staging
 prebuilt from a directory given (`BUNDLE_FROM=STAGINGS`, `BUNDLE_PREFIX_<STAGING>`), and packs installers. In CI the
 stagings come from the registry or are staged in the run, and the bundle only packs them (`.github/workflows`). What
-the bundle is made of is `cmake/Layers.cmake`; how a layer is taken, `cmake/Bundle.cmake`.
+the bundle is made of is `cmake/Layers.cmake`; built from sources, `cmake/Sources.cmake`; from prebuilt
+stagings, `cmake/Stagings.cmake`; packed, `cmake/Packing.cmake`.
 
 ## Prerequisites
 
@@ -66,7 +67,7 @@ cmake --build build/x64/gcc/release
 
 | Option | Default | Description |
 |---|---|---|
-| `BUNDLE_STAGINGS` | all five | The stagings the bundle has, the core first: `opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules` |
+| `BUNDLE_STAGINGS` | all five | The stagings the bundle has: `opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules`. Leave a module out to build and pack without it; `opendaq` is required |
 | `BUNDLE_REVISION_<LAYER>` | `bundle.json`'s | The revision of a layer (a repository, its name upper-cased): a full sha, a tag or a branch, e.g. `BUNDLE_REVISION_OPCUAMODULES` |
 | `BUNDLE_FROM` | `SOURCES` | `SOURCES`: every layer from its sources; `STAGINGS`: every staging prebuilt, nothing compiled |
 | `BUNDLE_PREFIX_<STAGING>` | — | With `BUNDLE_FROM=STAGINGS`, a prebuilt staging, unpacked (its name upper-cased, e.g. `BUNDLE_PREFIX_OPENDAQ`); one for every staging |
@@ -80,6 +81,7 @@ Pass options at configure time:
 ```bash
 cmake --preset="x64/gcc/release" -DBUNDLE_ENABLE_TESTS=ON
 cmake --preset="x64/gcc/release" -DBUNDLE_STAGINGS="opendaq;opcua-modules" -DBUNDLE_REVISION_OPCUAMODULES=v4.0.1
+cmake --preset bundle-native -DBUNDLE_STAGINGS="opendaq;opcua-modules;mqtt-module;lt-streaming-modules"   # without ASAM CMP
 ```
 
 ## Prebuilt stagings

@@ -1,9 +1,10 @@
 ##
-## What the bundle is made of: one bundle_declare per layer — a repository, named as in bundle.json — with its
-## staging, and its settings, which matter only when the layer is built here (cmake/Bundle.cmake).
+## What the bundle is made of: its layers — repositories, named as in bundle.json — each with its staging, in the
+## order they are taken, the core first (BUNDLE_LAYERS, <layer>=<staging>). How they are built is Sources.cmake's;
+## how they are taken prebuilt, Stagings.cmake's.
 ##
 ## The revisions, one per layer — a full sha, a tag or a branch — from bundle.json; BUNDLE_REVISION_<LAYER>, the
-## name upper-cased, in place of one (a preset or -D).
+## name upper-cased, in place of one (a preset or -D). BUNDLE_STAGINGS leaves layers out.
 ##
 
 include_guard(GLOBAL)
@@ -28,59 +29,29 @@ foreach(_layer openDAQ OpcUaModules MQTTStreamingModule LTStreamingModulesModern
 endforeach()
 
 
-# === the core ================================================================================================
-
-bundle_declare(openDAQ STAGING opendaq)
-
-set(OPENDAQ_ENABLE_OPCUA OFF CACHE BOOL "")
-set(OPENDAQ_GENERATE_DELPHI_BINDINGS OFF CACHE BOOL "")
-set(OPENDAQ_GENERATE_PYTHON_BINDINGS ON CACHE BOOL "")
-set(OPENDAQ_GENERATE_CSHARP_BINDINGS ON CACHE BOOL "")
-set(OPENDAQ_GENERATE_C_BINDINGS ON CACHE BOOL "")
-set(OPENDAQ_ENABLE_NATIVE_STREAMING ON CACHE BOOL "")
-set(OPENDAQ_ENABLE_WEBSOCKET_STREAMING OFF CACHE BOOL "")
-set(OPENDAQ_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
-set(OPENDAQ_DOCUMENTATION_TESTS OFF CACHE BOOL "")
-set(APP_ENABLE_WEBPAGE_EXAMPLES OFF CACHE BOOL "")
-# the core's own modules, as its staging has them; built only when the core comes from sources
-set(DAQMODULES_EMPTY_MODULE ON CACHE BOOL "")
-set(DAQMODULES_OPENDAQ_CLIENT_MODULE ON CACHE BOOL "")
-set(DAQMODULES_OPENDAQ_SERVER_MODULE ON CACHE BOOL "")
-set(DAQMODULES_REF_DEVICE_MODULE ON CACHE BOOL "")
-set(DAQMODULES_SIMULATOR_DEVICE_MODULE ON CACHE BOOL "")
-set(DAQMODULES_REF_FB_MODULE ON CACHE BOOL "")
-set(DAQMODULES_AUDIO_DEVICE_MODULE ON CACHE BOOL "")
-set(DAQMODULES_BASIC_CSV_RECORDER_MODULE ON CACHE BOOL "")
-set(DAQMODULES_LICENSING_MODULE ON CACHE BOOL "")
-set(DAQMODULES_PARQUET_RECORDER_MODULE OFF CACHE BOOL "")
-
-
-# === the modules =============================================================================================
-
-bundle_declare(OpcUaModules STAGING opcua-modules)
-
-set(DAQMODULES_OPCUA_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
-set(DAQMODULES_OPCUA_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
-set(DAQMODULES_OPCUA_ENABLE_CLIENT ON CACHE BOOL "")
-set(DAQMODULES_OPCUA_ENABLE_SERVER ON CACHE BOOL "")
-set(DAQMODULES_OPCUA_ENABLE_GENERIC_CLIENT ON CACHE BOOL "")
-
-bundle_declare(MQTTStreamingModule STAGING mqtt-module)
-
-set(DAQMODULES_MQTT_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
-set(DAQMODULES_MQTT_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
-set(DAQMODULES_MQTT_ENABLE_SSL OFF CACHE BOOL "")
-
-bundle_declare(LTStreamingModulesModern STAGING lt-streaming-modules)
-
-set(DAQMODULES_LT_STREAMING_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
-set(DAQMODULES_LT_STREAMING_ENABLE_EXAMPLE_APP OFF CACHE BOOL "")
-set(DAQMODULES_LT_STREAMING_ENABLE_CLIENT ON CACHE BOOL "")
-set(DAQMODULES_LT_STREAMING_ENABLE_SERVER ON CACHE BOOL "")
-
-bundle_declare(ASAM-CMP-Modules STAGING asam-cmp-modules)
-
-set(ASAM_CMP_ENABLE_TESTS ${BUNDLE_ENABLE_TESTS} CACHE BOOL "")
-set(ASAM_CMP_ENABLE_EXAMPLE OFF CACHE BOOL "")
-set(ASAM_CMP_BUILD_DATA_SINK ON CACHE BOOL "")
-set(ASAM_CMP_BUILD_CAPTURE_MODULE ON CACHE BOOL "")
+# the layers, the core first, each with its staging; those BUNDLE_STAGINGS names. The core is always there: the
+# modules are built against it, and every package has it
+set(BUNDLE_LAYERS)
+set(_known)
+foreach(_entry
+        openDAQ=opendaq
+        OpcUaModules=opcua-modules
+        MQTTStreamingModule=mqtt-module
+        LTStreamingModulesModern=lt-streaming-modules
+        ASAM-CMP-Modules=asam-cmp-modules)
+    string(REPLACE "=" ";" _pair "${_entry}")
+    list(GET _pair 1 _staging)
+    list(APPEND _known ${_staging})
+    if (_staging IN_LIST BUNDLE_STAGINGS)
+        list(APPEND BUNDLE_LAYERS "${_entry}")
+    endif()
+endforeach()
+if (NOT "opendaq" IN_LIST BUNDLE_STAGINGS)
+    message(FATAL_ERROR "BUNDLE_STAGINGS leaves out opendaq, the core: the modules are built against it")
+endif()
+foreach(_staging IN LISTS BUNDLE_STAGINGS)
+    if (NOT _staging IN_LIST _known)
+        list(JOIN _known ", " _known)
+        message(FATAL_ERROR "BUNDLE_STAGINGS names ${_staging}, which the bundle has not; it has ${_known}")
+    endif()
+endforeach()

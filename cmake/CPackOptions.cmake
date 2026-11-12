@@ -4,7 +4,7 @@
 ##
 ## The package preset picks the stagings, BUNDLE_PACK_STAGINGS, and their components, BUNDLE_PACK_COMPONENTS
 ## (Runtime, Development): the install components Packing.cmake recorded for each, CPACK_BUNDLE_<staging>_<component>,
-## the staging's name made a C identifier. The utils' config then names the package by CPACK_OPENDAQ_META_PACKAGE_NAME and writes its
+## the staging's name made a C identifier. A staging the build left out (BUNDLE_STAGINGS) is left out of the package. The utils' config then names the package by CPACK_OPENDAQ_META_PACKAGE_NAME and writes its
 ## staging-meta.json.
 ##
 
@@ -20,6 +20,10 @@ if (NOT BUNDLE_PACK_STAGINGS OR NOT BUNDLE_PACK_COMPONENTS)
 endif()
 set(_picked)
 foreach(_staging IN LISTS BUNDLE_PACK_STAGINGS)
+    if (NOT _staging IN_LIST CPACK_BUNDLE_STAGINGS)
+        message(STATUS "cpack: ${_staging} is not in this build (BUNDLE_STAGINGS), left out")
+        continue()
+    endif()
     string(MAKE_C_IDENTIFIER "${_staging}" _c)
     set(_found FALSE)
     foreach(_component IN LISTS BUNDLE_PACK_COMPONENTS)
@@ -35,6 +39,9 @@ endforeach()
 # a macOS package carries the bundle's uninstall script (Packing.cmake)
 if (CPACK_GENERATOR STREQUAL "productbuild")
     list(APPEND _picked bundle_Runtime)
+endif()
+if (NOT _picked)
+    message(FATAL_ERROR "cpack: none of ${BUNDLE_PACK_STAGINGS} is in this build (${CPACK_BUNDLE_STAGINGS})")
 endif()
 set(CPACK_COMPONENTS_ALL ${_picked})
 
