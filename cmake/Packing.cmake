@@ -16,6 +16,9 @@ endif()
 
 set(BUNDLE_TRIPLET "" CACHE STRING "The triplet the packages are named by; empty: the one the utils compose")
 
+# the stagings this build has, so a package preset's others are left out at cpack time
+set(CPACK_BUNDLE_STAGINGS ${BUNDLE_STAGINGS})
+
 # each staging's install components by what they are for: Runtime when the name says so, Development else —
 # prebuilt, <staging>_Runtime/_Development and <module>_Runtime; from sources, the names the layer gave
 # (openDAQ_opcua_client_module_Runtime, External); for CPackOptions.cmake to pick from at cpack time
@@ -173,7 +176,7 @@ endif()
 
 # an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
 # the rest required. A prebuilt staging has <staging>_Runtime, <staging>_Development and a <module>_Runtime per
-# module (Bundle.cmake); a layer built here has no choices of its own, all its components required
+# module (Stagings.cmake); a layer built here has no choices of its own, all its components required
 cpack_add_component_group(modules DISPLAY_NAME "Modules" DESCRIPTION "openDAQ modules" EXPANDED)
 foreach(_staging IN LISTS BUNDLE_STAGINGS)
     string(MAKE_C_IDENTIFIER "${_staging}" _c)

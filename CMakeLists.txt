@@ -6,11 +6,16 @@ file(READ "${CMAKE_CURRENT_LIST_DIR}/bundle.json" _bundle)
 string(JSON _bundle_version GET "${_bundle}" version)
 project(openDAQ-bundle VERSION ${_bundle_version} LANGUAGES CXX)
 
-# The bundle: the stagings named, each prebuilt from a prefix or built from its layer's sources (cmake/Bundle.cmake).
-# What the bundle is made of is cmake/Layers.cmake; how it is packed, cmake/Packing.cmake.
+# The bundle: what it is made of (cmake/Layers.cmake); every layer built from its sources (cmake/Sources.cmake) or
+# every staging taken prebuilt (cmake/Stagings.cmake), never a mix; how it is packed (cmake/Packing.cmake).
+set(BUNDLE_FROM SOURCES CACHE STRING "Where the layers come from: SOURCES, built here; STAGINGS, prebuilt from BUNDLE_PREFIX_<STAGING>")
+set_property(CACHE BUNDLE_FROM PROPERTY STRINGS SOURCES STAGINGS)
+if (NOT BUNDLE_FROM MATCHES "^(SOURCES|STAGINGS)$")
+    message(FATAL_ERROR "BUNDLE_FROM is SOURCES or STAGINGS, not ${BUNDLE_FROM}")
+endif()
 set(BUNDLE_STAGINGS "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules"
-    CACHE STRING "The stagings the bundle has, the core first")
-option(BUNDLE_ENABLE_TESTS "Build the layers' tests, for the layers built from sources" OFF)
+    CACHE STRING "The stagings the bundle has")
+option(BUNDLE_ENABLE_TESTS "Build the layers' tests, when they are built from sources" OFF)
 
 include(FetchContent)
 
@@ -23,7 +28,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(opendaq-cmake-utils)
 
-include(cmake/Bundle.cmake)
 include(cmake/Layers.cmake)
-bundle_make_available()
+if (BUNDLE_FROM STREQUAL "SOURCES")
+    include(cmake/Sources.cmake)
+else()
+    include(cmake/Stagings.cmake)
+endif()
 include(cmake/Packing.cmake)
