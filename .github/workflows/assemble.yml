@@ -51,6 +51,7 @@ jobs:
               # the commits resolved there, so configure takes the same ones and resolves no ref again
               artifacts = []
               cache_variables = {f"BUNDLE_REVISION_{REPOSITORIES[staging].upper()}": sha for staging, sha in revision.items()}
+              cache_variables["BUNDLE_STAGINGS"] = ";".join(revision)        # the stagings resolve.yml kept
               for staging in revision:
                   artifacts.append({"name": f"{staging}-staging-{job}", "dir": f"stagings/{staging}"})
                   # the core's tarball carries its install prefix, opt/opendaq, except on Windows

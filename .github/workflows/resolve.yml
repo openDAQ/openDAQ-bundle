@@ -32,6 +32,10 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
+      exclude-stagings:
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        type: string
+        default: ""
     outputs:
       revisions:
         description: "The commit of each staging's layer: a JSON object, staging → full sha"
@@ -104,10 +108,19 @@ jobs:
                       return refs[name]
               sys.exit(f"::error::{REPOSITORIES[staging]} has no branch or tag {ref!r} (a commit is given in full)")
 
-          # bundle.json's revisions, each replaced by an input that is set
+          # the stagings left out; never the core, which the modules are built against
+          excluded = [s.strip() for s in (inputs.get("exclude-stagings") or "").split(";") if s.strip()]
+          if unknown := [s for s in excluded if s not in REPOSITORIES]:
+              sys.exit(f"::error::exclude-stagings names {unknown}, which the bundle has not; it has {list(REPOSITORIES)}")
+          if "opendaq" in excluded:
+              sys.exit("::error::exclude-stagings leaves out opendaq, the core: the modules are built against it")
+
+          # bundle.json's revisions, each replaced by an input that is set; the stagings left out dropped
           revision = {}
           for layer, ref in json.load(open("bundle.json"))["layers"].items():
               staging = STAGINGS[layer]
+              if staging in excluded:
+                  continue
               given = (inputs.get(staging) or "").strip()
               revision[staging] = commit(staging, given or ref)
 
