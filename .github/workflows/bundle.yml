@@ -2,7 +2,8 @@ name: Bundle
 
 # The bundle's installers: resolve.yml lays the stagings of the bundle's commits into this run, assemble.yml builds
 # the installers from them. A layer's revision can be given as an input (a commit, or a branch or tag taken at its
-# head now), in place of bundle.json's. Called by the bundle's own triggers and by a layer's CI.
+# head now), in place of bundle.json's; a module can be left out (exclude-stagings). Called by the bundle's own
+# triggers and by a layer's CI.
 
 on:
   workflow_dispatch:
@@ -27,6 +28,10 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
+      exclude-stagings:
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        type: string
+        default: ""
   workflow_call:
     inputs:
       opendaq:
@@ -49,6 +54,10 @@ on:
         description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
         type: string
         default: ""
+      exclude-stagings:
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        type: string
+        default: ""
   pull_request:
 
 permissions:
@@ -68,6 +77,7 @@ jobs:
       mqtt-module: ${{ inputs.mqtt-module }}
       lt-streaming-modules: ${{ inputs.lt-streaming-modules }}
       asam-cmp-modules: ${{ inputs.asam-cmp-modules }}
+      exclude-stagings: ${{ inputs.exclude-stagings }}
 
   assemble:
     name: Assemble
