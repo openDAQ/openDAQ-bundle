@@ -14,16 +14,18 @@ if (NOT BUNDLE_VERSION)
     set(BUNDLE_VERSION "${PROJECT_VERSION}")
 endif()
 
-# each staging's install components, of this build's own variant, by what they are for: Runtime when the name
-# says so, Development else — prebuilt, <staging>_Runtime/_Development; from sources, the names the layer gave
+set(BUNDLE_TRIPLET "" CACHE STRING "The triplet the packages are named by; empty: the one the utils compose")
+
+# each staging's install components by what they are for: Runtime when the name says so, Development else —
+# prebuilt, <staging>_Runtime/_Development and <module>_Runtime; from sources, the names the layer gave
 # (openDAQ_opcua_client_module_Runtime, External); for CPackOptions.cmake to pick from at cpack time
 foreach(_staging IN LISTS BUNDLE_STAGINGS)
-    FetchLayer_GetProperties(${_staging})
-    string(TOLOWER "${_staging}" _name)
-    string(MAKE_C_IDENTIFIER "${_name}" _c)
+    string(MAKE_C_IDENTIFIER "${_staging}" _c)
+    get_property(BUNDLE_COMPONENTS_${_c} GLOBAL PROPERTY BUNDLE_COMPONENTS_${_c})
+    get_property(BUNDLE_PREBUILT_${_c} GLOBAL PROPERTY BUNDLE_PREBUILT_${_c})
     set(CPACK_BUNDLE_${_c}_Runtime)
     set(CPACK_BUNDLE_${_c}_Development)
-    foreach(_component IN LISTS ${_name}_INSTALL_COMPONENTS)
+    foreach(_component IN LISTS BUNDLE_COMPONENTS_${_c})
         if (_component MATCHES "_Runtime$")
             list(APPEND CPACK_BUNDLE_${_c}_Runtime ${_component})
         else()
@@ -37,9 +39,10 @@ set(CPACK_OPENDAQ_META_PACKAGE_NAME "opendaq-bundle")
 set(CPACK_OPENDAQ_META_PACKAGE_VERSION "${BUNDLE_VERSION}")
 opendaq_detect_settings()
 opendaq_detect_package()
-__FetchLayer_axis_get(triplet NATIVE _triplet)                 # this build's own, BUNDLE_TRIPLET when given
 opendaq_compose_package_triplet()
-set(CPACK_OPENDAQ_META_PACKAGE_TRIPLET "${_triplet}")
+if (BUNDLE_TRIPLET)
+    set(CPACK_OPENDAQ_META_PACKAGE_TRIPLET "${BUNDLE_TRIPLET}")
+endif()
 opendaq_compose_package_file_name()
 
 set(CPACK_PACKAGE_NAME "${CPACK_OPENDAQ_META_PACKAGE_NAME}")
@@ -170,18 +173,17 @@ endif()
 
 # an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
 # the rest required. A prebuilt staging has <staging>_Runtime, <staging>_Development and a <module>_Runtime per
-# module (FetchLayer/import.cmake); a layer built here has no choices of its own, all its components required
+# module (Bundle.cmake); a layer built here has no choices of its own, all its components required
 cpack_add_component_group(modules DISPLAY_NAME "Modules" DESCRIPTION "openDAQ modules" EXPANDED)
 foreach(_staging IN LISTS BUNDLE_STAGINGS)
-    string(TOLOWER "${_staging}" _name)
-    string(MAKE_C_IDENTIFIER "${_name}" _c)
-    foreach(_component IN LISTS ${_name}_INSTALL_COMPONENTS)
-        if (${_name}_PREFIX AND _component MATCHES "^(.+)_Runtime$" AND NOT _component STREQUAL "${_c}_Runtime")
+    string(MAKE_C_IDENTIFIER "${_staging}" _c)
+    foreach(_component IN LISTS BUNDLE_COMPONENTS_${_c})
+        if (BUNDLE_PREBUILT_${_c} AND _component MATCHES "^(.+)_Runtime$" AND NOT _component STREQUAL "${_c}_Runtime")
             cpack_add_component(${_component} DISPLAY_NAME "${CMAKE_MATCH_1}" GROUP modules)
         elseif (_component MATCHES "_Runtime$")
-            cpack_add_component(${_component} DISPLAY_NAME "${_name} runtime" REQUIRED)
+            cpack_add_component(${_component} DISPLAY_NAME "${_staging} runtime" REQUIRED)
         else()
-            cpack_add_component(${_component} DISPLAY_NAME "${_name} development" REQUIRED)
+            cpack_add_component(${_component} DISPLAY_NAME "${_staging} development" REQUIRED)
         endif()
     endforeach()
 endforeach()

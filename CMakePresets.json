@@ -102,25 +102,23 @@
         },
         {
             "name": "bundle-prefixes",
-            "displayName": "Bundle from stagings given as prefixes (FETCHLAYER_PREFIX_<STAGING>), nothing compiled; CI",
+            "displayName": "Bundle from stagings given as prefixes (BUNDLE_PREFIX_<STAGING>), nothing compiled; CI",
             "inherits": [
                 "release"
             ],
             "cacheVariables": {
-                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
-                "FETCHLAYER_BUILD": "NEVER"
+                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules"
             }
         },
         {
             "name": "bundle-native",
-            "displayName": "Bundle by FetchLayer, this machine's triplet",
+            "displayName": "Bundle from the layers' sources, or a staging given as a prefix (BUNDLE_PREFIX_<STAGING>)",
             "inherits": [
                 "release",
                 "ninja"
             ],
             "cacheVariables": {
-                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
-                "FETCHLAYER_STORE": "${sourceDir}/build/store"
+                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules"
             }
         },
         {
