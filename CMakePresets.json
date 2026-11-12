@@ -102,17 +102,18 @@
         },
         {
             "name": "bundle-prefixes",
-            "displayName": "Bundle from stagings given as prefixes (BUNDLE_PREFIX_<STAGING>), nothing compiled; CI",
+            "displayName": "Bundle from prebuilt stagings (BUNDLE_PREFIX_<STAGING>), nothing compiled; CI",
             "inherits": [
                 "release"
             ],
             "cacheVariables": {
-                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules"
+                "BUNDLE_STAGINGS": "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules",
+                "BUNDLE_FROM": "STAGINGS"
             }
         },
         {
             "name": "bundle-native",
-            "displayName": "Bundle from the layers' sources, or a staging given as a prefix (BUNDLE_PREFIX_<STAGING>)",
+            "displayName": "Bundle from the layers' sources, this machine's triplet",
             "inherits": [
                 "release",
                 "ninja"

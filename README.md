@@ -8,10 +8,10 @@ A CMake super-project that bundles [openDAQ](https://github.com/openDAQ/openDAQ)
 
 Each of these repositories is a **layer** at one revision, the one `bundle.json` names. What a layer publishes is
 its **staging**: `opendaq`, `opcua-modules`, `mqtt-module`, `lt-streaming-modules`, `asam-cmp-modules`. The bundle
-builds each layer from its sources in one tree, fetched with CMake's `FetchContent`, or takes its staging prebuilt
-from a directory given (`BUNDLE_PREFIX_<STAGING>`), and packs installers. In CI the stagings come from the registry
-or are staged in the run, and the bundle only packs them (`.github/workflows`). What the bundle is made of is
-`cmake/Layers.cmake`; how a layer is taken, `cmake/Bundle.cmake`.
+builds every layer from its sources in one tree, fetched with CMake's `FetchContent`, or takes every staging
+prebuilt from a directory given (`BUNDLE_FROM=STAGINGS`, `BUNDLE_PREFIX_<STAGING>`), and packs installers. In CI the
+stagings come from the registry or are staged in the run, and the bundle only packs them (`.github/workflows`). What
+the bundle is made of is `cmake/Layers.cmake`; how a layer is taken, `cmake/Bundle.cmake`.
 
 ## Prerequisites
 
@@ -68,7 +68,8 @@ cmake --build build/x64/gcc/release
 |---|---|---|
 | `BUNDLE_STAGINGS` | all five | The stagings the bundle has, the core first: `opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules` |
 | `BUNDLE_REVISION_<LAYER>` | `bundle.json`'s | The revision of a layer (a repository, its name upper-cased): a full sha, a tag or a branch, e.g. `BUNDLE_REVISION_OPCUAMODULES` |
-| `BUNDLE_PREFIX_<STAGING>` | — | A prebuilt staging, unpacked (its name upper-cased, e.g. `BUNDLE_PREFIX_OPENDAQ`); without it, the layer is built from its sources |
+| `BUNDLE_FROM` | `SOURCES` | `SOURCES`: every layer from its sources; `STAGINGS`: every staging prebuilt, nothing compiled |
+| `BUNDLE_PREFIX_<STAGING>` | — | With `BUNDLE_FROM=STAGINGS`, a prebuilt staging, unpacked (its name upper-cased, e.g. `BUNDLE_PREFIX_OPENDAQ`); one for every staging |
 | `FETCHCONTENT_SOURCE_DIR_<LAYER>` | — | A layer from a local checkout |
 | `BUNDLE_TRIPLET` | the utils' | The triplet the packages are named by |
 | `BUNDLE_VERSION` | `bundle.json`'s | The version of the packages |
@@ -79,7 +80,6 @@ Pass options at configure time:
 ```bash
 cmake --preset="x64/gcc/release" -DBUNDLE_ENABLE_TESTS=ON
 cmake --preset="x64/gcc/release" -DBUNDLE_STAGINGS="opendaq;opcua-modules" -DBUNDLE_REVISION_OPCUAMODULES=v4.0.1
-cmake --preset bundle-native -DBUNDLE_PREFIX_OPENDAQ=$PWD/stagings/opendaq/opt/opendaq   # the core prebuilt, the modules from sources
 ```
 
 ## Prebuilt stagings
@@ -95,13 +95,16 @@ gh auth token | oras login ghcr.io -u <github user> --password-stdin
 `oras login` keeps the token in `~/.docker/config.json`; another file is passed as `-DORAS_REGISTRY_CONFIG=`.
 
 A staging is one package per platform; its tag `pkg-<sha256>` is computed from the commits and the triplet
-(openDAQ/openDAQ-CI#21 shows how). Pulled and unpacked, each into a directory of its own, it is given as
+(openDAQ/openDAQ-CI#21 shows how). Pulled and unpacked, each into a directory of its own, every staging is given as
 `BUNDLE_PREFIX_<STAGING>`; the core's tarball holds its prefix, `opt/opendaq`, except on Windows:
 
 ```bash
 oras pull ghcr.io/opendaq/dev/staging/opendaq:pkg-<sha256> -o downloads/opendaq
 mkdir -p stagings/opendaq && tar -xzf downloads/opendaq/*.tar.gz -C stagings/opendaq
-cmake --preset bundle-native -DBUNDLE_PREFIX_OPENDAQ=$PWD/stagings/opendaq/opt/opendaq
+# … the same for opcua-modules, mqtt-module, lt-streaming-modules, asam-cmp-modules
+cmake --preset bundle-prefixes -B build/bundle-prefixes \
+      -DBUNDLE_PREFIX_OPENDAQ=$PWD/stagings/opendaq/opt/opendaq \
+      -DBUNDLE_PREFIX_OPCUA-MODULES=$PWD/stagings/opcua-modules  # … one for every staging
 ```
 
 ## Package

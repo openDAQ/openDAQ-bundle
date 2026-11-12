@@ -30,7 +30,7 @@ endforeach()
 
 # === the core ================================================================================================
 
-bundle_declare(openDAQ STAGING opendaq PACKAGE openDAQ)
+bundle_declare(openDAQ STAGING opendaq)
 
 set(OPENDAQ_ENABLE_OPCUA OFF CACHE BOOL "")
 set(OPENDAQ_GENERATE_DELPHI_BINDINGS OFF CACHE BOOL "")

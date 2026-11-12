@@ -1,17 +1,16 @@
 ##
-## The bundle's layers, each a prebuilt staging or its sources.
+## The bundle's layers, all from their sources or all from their stagings, as BUNDLE_FROM says.
 ##
-## A staging given as a prefix, BUNDLE_PREFIX_<STAGING> (the name upper-cased), is taken prebuilt: its files are
-## installed under its install components, and the core's CMake package is found in it, so a module built here
-## builds against it. Else its layer comes from its sources by FetchContent, at the revision bundle.json names
-## (BUNDLE_REVISION_<LAYER> in place of one): every layer is fetched first, then each one's
-## external/boost/Boost.cmake is included — Boost is built once, by the core, with what every layer needs — and
-## then each is added, in the order declared.
+## SOURCES (the default): every layer by FetchContent, at the revision bundle.json names (BUNDLE_REVISION_<LAYER> in
+## place of one): every layer is fetched first, then each one's external/boost/Boost.cmake is included — Boost is
+## built once, by the core, with what every layer needs — and then each is added, in the order declared.
+## STAGINGS: every staging prebuilt, unpacked into the directory BUNDLE_PREFIX_<STAGING> gives (the name
+## upper-cased); its files are installed under its install components, nothing is fetched or compiled.
 ##
 ## A staging's install components are kept for Packing.cmake: BUNDLE_COMPONENTS_<c>, and BUNDLE_PREBUILT_<c> when
 ## it is prebuilt, <c> the staging's name made a C identifier.
 ##
-##   bundle_declare(<layer> STAGING <staging> [PACKAGE <name>])
+##   bundle_declare(<layer> STAGING <staging>)
 ##   bundle_make_available()
 ##
 
@@ -21,21 +20,26 @@ include(FetchContent)
 
 set(_BUNDLE_RUNTIME_PATTERNS "*.so" "*.so.*" "*.dylib" "*.dll")
 
-# bundle_declare(<layer> STAGING <staging> [PACKAGE <name>])
-#   A layer, named as its repository, and its staging; PACKAGE: the CMake package the staging installs (the core's)
+set(BUNDLE_FROM SOURCES CACHE STRING "Where the layers come from: SOURCES, by FetchContent; STAGINGS, prebuilt from BUNDLE_PREFIX_<STAGING>")
+set_property(CACHE BUNDLE_FROM PROPERTY STRINGS SOURCES STAGINGS)
+if (NOT BUNDLE_FROM MATCHES "^(SOURCES|STAGINGS)$")
+    message(FATAL_ERROR "BUNDLE_FROM is SOURCES or STAGINGS, not ${BUNDLE_FROM}")
+endif()
+
+# bundle_declare(<layer> STAGING <staging>)
+#   A layer, named as its repository, and its staging
 function(bundle_declare LAYER)
-    cmake_parse_arguments(PARSE_ARGV 1 _arg "" "STAGING;PACKAGE" "")
+    cmake_parse_arguments(PARSE_ARGV 1 _arg "" "STAGING" "")
     if (NOT _arg_STAGING IN_LIST BUNDLE_STAGINGS)
         return()
     endif()
     string(TOUPPER "${LAYER}" _layer)
     string(TOUPPER "${_arg_STAGING}" _staging)
-    set(BUNDLE_PREFIX_${_staging} "" CACHE PATH "The prebuilt staging ${_arg_STAGING}; empty: built from ${LAYER}'s sources")
+    set(BUNDLE_PREFIX_${_staging} "" CACHE PATH "The prebuilt staging ${_arg_STAGING}, unpacked (BUNDLE_FROM=STAGINGS)")
 
     set_property(GLOBAL APPEND PROPERTY BUNDLE_LAYERS "${LAYER}")
     set_property(GLOBAL PROPERTY BUNDLE_STAGING_${LAYER} "${_arg_STAGING}")
-    set_property(GLOBAL PROPERTY BUNDLE_PACKAGE_${LAYER} "${_arg_PACKAGE}")
-    if (NOT BUNDLE_PREFIX_${_staging})
+    if (BUNDLE_FROM STREQUAL "SOURCES")
         # download only: a SOURCE_SUBDIR that does not exist, so MakeAvailable adds nothing yet
         FetchContent_Declare(
             ${LAYER}
@@ -108,40 +112,41 @@ function(__bundle_prebuilt STAGING PREFIX)
 endfunction()
 
 # bundle_make_available()
-#   Every layer declared: the prebuilt ones installed, the others fetched, their Boost.cmake included, then added
+#   Every layer declared: from STAGINGS, each staging's prefix installed; from SOURCES, every layer fetched, their
+#   Boost.cmake included, then added
 function(bundle_make_available)
     get_property(_layers GLOBAL PROPERTY BUNDLE_LAYERS)
 
-    set(_sources)
-    foreach(_layer IN LISTS _layers)
-        get_property(_staging GLOBAL PROPERTY BUNDLE_STAGING_${_layer})
-        get_property(_package GLOBAL PROPERTY BUNDLE_PACKAGE_${_layer})
-        string(TOUPPER "${_staging}" _upper)
-        set(_prefix "${BUNDLE_PREFIX_${_upper}}")
-        if (_prefix)
-            __bundle_prebuilt("${_staging}" "${_prefix}")
-            if (_package)
-                # found in the prefix only, so no other installation is taken; for the layers built here
-                list(PREPEND CMAKE_PREFIX_PATH "${_prefix}")
-                find_package(${_package} CONFIG REQUIRED GLOBAL PATHS "${_prefix}" NO_DEFAULT_PATH)
+    if (BUNDLE_FROM STREQUAL "STAGINGS")
+        set(_missing)
+        foreach(_layer IN LISTS _layers)
+            get_property(_staging GLOBAL PROPERTY BUNDLE_STAGING_${_layer})
+            string(TOUPPER "${_staging}" _upper)
+            if (NOT IS_DIRECTORY "${BUNDLE_PREFIX_${_upper}}")
+                list(APPEND _missing "BUNDLE_PREFIX_${_upper}")
             endif()
-        else()
-            list(APPEND _sources ${_layer})
+        endforeach()
+        if (_missing)
+            list(JOIN _missing ", " _missing)
+            message(FATAL_ERROR "BUNDLE_FROM=STAGINGS takes every staging prebuilt; no directory given as ${_missing}")
         endif()
-    endforeach()
-    if (NOT _sources)
+        foreach(_layer IN LISTS _layers)
+            get_property(_staging GLOBAL PROPERTY BUNDLE_STAGING_${_layer})
+            string(TOUPPER "${_staging}" _upper)
+            __bundle_prebuilt("${_staging}" "${BUNDLE_PREFIX_${_upper}}")
+        endforeach()
         return()
     endif()
 
-    FetchContent_MakeAvailable(${_sources})
-    foreach(_layer IN LISTS _sources)
+    FetchContent_MakeAvailable(${_layers})
+    foreach(_layer IN LISTS _layers)
         string(TOLOWER "${_layer}" _lower)
         include("${${_lower}_SOURCE_DIR}/external/boost/Boost.cmake" OPTIONAL)
     endforeach()
 
     # each layer's install components are those that appear while it is added; what it installs with no
     # COMPONENT goes to <c>_Development. SYSTEM, so its headers do not turn its warnings into the consumers' errors
-    foreach(_layer IN LISTS _sources)
+    foreach(_layer IN LISTS _layers)
         get_property(_staging GLOBAL PROPERTY BUNDLE_STAGING_${_layer})
         string(MAKE_C_IDENTIFIER "${_staging}" _c)
         string(TOLOWER "${_layer}" _lower)
