@@ -102,10 +102,15 @@ A staging is one package per platform; its tag `pkg-<sha256>` is computed from t
 oras pull ghcr.io/opendaq/dev/staging/opendaq:pkg-<sha256> -o downloads/opendaq
 mkdir -p stagings/opendaq && tar -xzf downloads/opendaq/*.tar.gz -C stagings/opendaq
 # … the same for opcua-modules, mqtt-module, lt-streaming-modules, asam-cmp-modules
-cmake --preset bundle-prefixes -B build/bundle-prefixes \
+cmake --preset bundle-native -DBUNDLE_FROM=STAGINGS \
       -DBUNDLE_PREFIX_OPENDAQ=$PWD/stagings/opendaq/opt/opendaq \
-      -DBUNDLE_PREFIX_OPCUA-MODULES=$PWD/stagings/opcua-modules  # … one for every staging
+      -DBUNDLE_PREFIX_OPCUA-MODULES=$PWD/stagings/opcua-modules \
+      -DBUNDLE_PREFIX_MQTT-MODULE=$PWD/stagings/mqtt-module \
+      -DBUNDLE_PREFIX_LT-STREAMING-MODULES=$PWD/stagings/lt-streaming-modules \
+      -DBUNDLE_PREFIX_ASAM-CMP-MODULES=$PWD/stagings/asam-cmp-modules
 ```
+
+Then build and pack as below; nothing is compiled.
 
 ## Package
 
