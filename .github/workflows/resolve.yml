@@ -3,11 +3,10 @@ name: Resolve the bundle
 # What the bundle is assembled of: a commit per layer and the platforms, and every staging laid into this run as an
 # artifact, <staging>-staging-<job>, as a layer's stage names it, for assemble.yml to build from. The commits are
 # bundle.json's, each replaced by an input that is set (a commit, or a branch or tag taken at its head now). The
-# stagings come from the registry, by staging-pull, each from the channel its commit lies in (openDAQ-CI's
-# resolve-channel: release/** stable, main dev, dev also for a commit on neither, staged by hand); a module's is asked
-# for by the core it was built against too, so the modules of one bundle share its core. A staging the registry lacks
-# is staged here by its layer's stage.yml, called, never pushed; a module after the core is in the run, which its
-# stage then does not pull again.
+# stagings come from the registry, by staging-pull, from ghcr.io/openDAQ/staging/<staging> by the commit each was
+# built of; a module's is asked for by the core it was built against too, so the modules of one bundle share its
+# core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed; a module after
+# the core is in the run, which its stage then does not pull again.
 
 on:
   workflow_call:
@@ -133,25 +132,11 @@ jobs:
 
           platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner}
                        for job, (triplet, generator, runner) in JOBS.items()]
-          # the modules' commits, by repository, for their channels
-          modules = {f"openDAQ/{REPOSITORIES[staging]}": sha for staging, sha in revision.items() if staging != "opendaq"}
-
-          outputs = {"revisions": revision, "platforms": platforms, "modules": modules, "exclude-jobs": EXCLUDE_JOBS,
-                     "repositories": {staging: f"openDAQ/{layer}" for staging, layer in REPOSITORIES.items()}}
+          outputs = {"revisions": revision, "platforms": platforms, "exclude-jobs": EXCLUDE_JOBS}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
                   f.write(f"{key}={json.dumps(value)}\n")
-
-      # the channel each staging is published in, by where its commit lies: the core's commit given as the commit,
-      # the modules' as what it is built against, only to learn theirs (nothing is published here)
-      - name: Resolve the channels
-        id: channel
-        uses: openDAQ/openDAQ-CI/.github/actions/resolve-channel@bundle/extract-each-artifact-into-its-dir
-        with:
-          repository: openDAQ/openDAQ
-          commit: ${{ fromJSON(steps.stagings.outputs.revisions)['opendaq'] }}
-          depends: ${{ steps.stagings.outputs.modules }}
 
       - name: Request the stagings
         id: request
@@ -159,18 +144,10 @@ jobs:
         env:
           REVISIONS: ${{ steps.stagings.outputs.revisions }}
           PLATFORMS: ${{ steps.stagings.outputs.platforms }}
-          REPOSITORIES: ${{ steps.stagings.outputs.repositories }}
-          CORE_CHANNEL: ${{ steps.channel.outputs.channel }}
-          MODULE_CHANNELS: ${{ steps.channel.outputs.depends-channels }}
         run: |
           import json, os
 
           revision = json.loads(os.environ["REVISIONS"])
-          repository = json.loads(os.environ["REPOSITORIES"])
-          # a staging is looked for in its commit's channel, and in dev when it lies on no main or release/** (staged
-          # by hand)
-          channels = {"openDAQ/openDAQ": os.environ["CORE_CHANNEL"], **json.loads(os.environ["MODULE_CHANNELS"])}
-          channel = {staging: channels[repository[staging]] or "dev" for staging in revision}
 
           # every staging of every platform, by its triplet, into an artifact named as the staging's own stage names
           # it; optional: the check tells what is there
@@ -182,9 +159,8 @@ jobs:
                   if staging != "opendaq":
                       annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
                   pull.append({"artifact": f"{staging}-staging-{job}",
-                               "packages": [{"path": f"ghcr.io/openDAQ/{channel[staging]}/staging/{staging}",
+                               "packages": [{"path": f"ghcr.io/openDAQ/staging/{staging}",
                                              "annotations": annotations, "optional": True}]})
-          print(json.dumps(channel, indent=2))
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"request={json.dumps(pull)}\n")
