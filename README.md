@@ -21,7 +21,7 @@ stagings, `cmake/Stagings.cmake`; packed, `cmake/Packing.cmake`.
 - **Windows:** Visual Studio 2017 or 2022 (with C++ workload) — used as compiler toolchain only
 - **Linux:** GCC or Clang, Ninja
 - **macOS:** Xcode command line tools, Ninja
-- For prebuilt stagings: [oras](https://oras.land) and read access to `ghcr.io/opendaq/dev/staging`
+- For prebuilt stagings: [oras](https://oras.land) and read access to `ghcr.io/opendaq/staging`
 
 On an Intel Mac with Homebrew in `/usr/local`, Homebrew's `boost`, `spdlog`, `fmt` and `rapidjson` headers shadow
 the ones the build fetches. Unlink them for a build from sources (`brew unlink boost spdlog fmt rapidjson`, then
@@ -101,7 +101,7 @@ A staging is one package per platform; its tag `pkg-<sha256>` is computed from t
 `BUNDLE_PREFIX_<STAGING>`; the core's tarball holds its prefix, `opt/opendaq`, except on Windows:
 
 ```bash
-oras pull ghcr.io/opendaq/dev/staging/opendaq:pkg-<sha256> -o downloads/opendaq
+oras pull ghcr.io/opendaq/staging/opendaq:pkg-<sha256> -o downloads/opendaq
 mkdir -p stagings/opendaq && tar -xzf downloads/opendaq/*.tar.gz -C stagings/opendaq
 # … the same for opcua-modules, mqtt-module, lt-streaming-modules, asam-cmp-modules
 cmake --preset bundle-native -DBUNDLE_FROM=STAGINGS \
