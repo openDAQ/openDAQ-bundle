@@ -49,7 +49,7 @@ permissions:
 
 jobs:
   resolve:
-    name: Resolve the stagings
+    name: Resolve revisions
     runs-on: ubuntu-latest
     outputs:
       revisions: ${{ steps.stagings.outputs.revisions }}
@@ -195,7 +195,7 @@ jobs:
               f.write(f"missing={json.dumps(missing)}\n")
 
   pull:
-    name: Pull
+    name: Pull stagings
     needs: resolve
     if: needs.resolve.outputs.staging-artifacts != '[]'
     uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
