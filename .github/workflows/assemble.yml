@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   plan:
-    name: Plan the build
+    name: Configure
     runs-on: ubuntu-latest
     outputs:
       jobs: ${{ steps.plan.outputs.jobs }}
