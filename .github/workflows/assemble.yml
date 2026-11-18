@@ -20,18 +20,18 @@ permissions:
   contents: read
 
 jobs:
-  plan:
+  configure:
     name: Configure
     runs-on: ubuntu-latest
     outputs:
-      jobs: ${{ steps.plan.outputs.jobs }}
-      packages: ${{ steps.plan.outputs.packages }}
-      cmake-presets: ${{ steps.plan.outputs.cmake-presets }}
-      cpack-presets: ${{ steps.plan.outputs.cpack-presets }}
-      checks: ${{ steps.plan.outputs.checks }}
+      jobs: ${{ steps.configure.outputs.jobs }}
+      packages: ${{ steps.configure.outputs.packages }}
+      cmake-presets: ${{ steps.configure.outputs.cmake-presets }}
+      cpack-presets: ${{ steps.configure.outputs.cpack-presets }}
+      checks: ${{ steps.configure.outputs.checks }}
     steps:
-      - name: Plan
-        id: plan
+      - name: Configure
+        id: configure
         shell: python3 {0}
         env:
           REVISIONS: ${{ inputs.revisions }}
@@ -77,23 +77,23 @@ jobs:
 
   build:
     name: Build
-    needs: plan
+    needs: configure
     uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@bundle/extract-each-artifact-into-its-dir
     with:
-      include-jobs: ${{ needs.plan.outputs.jobs }}
-      packages: ${{ needs.plan.outputs.packages }}
-      cmake-presets: ${{ needs.plan.outputs.cmake-presets }}
-      cpack-presets: ${{ needs.plan.outputs.cpack-presets }}
+      include-jobs: ${{ needs.configure.outputs.jobs }}
+      packages: ${{ needs.configure.outputs.packages }}
+      cmake-presets: ${{ needs.configure.outputs.cmake-presets }}
+      cpack-presets: ${{ needs.configure.outputs.cpack-presets }}
 
   # installed as a user would, everything selected, and smoke-checked
   check:
     name: Check ${{ matrix.check.job }}
-    needs: [plan, build]
+    needs: [configure, build]
     runs-on: ${{ matrix.check.runner }}
     strategy:
       fail-fast: false
       matrix:
-        check: ${{ fromJSON(needs.plan.outputs.checks) }}
+        check: ${{ fromJSON(needs.configure.outputs.checks) }}
     defaults:
       run:
         shell: bash
@@ -129,7 +129,27 @@ jobs:
         run: |
           cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }}
           cmake --build build/installed --config Release
-          ctest --test-dir build/installed -C Release --verbose      # each module loaded, by its id
+          ctest --test-dir build/installed -C Release --verbose 2>&1 | tee smoke.log      # each module loaded, by its id
+          exit "${PIPESTATUS[0]}"
+
+      # the run's summary: the installer, and per test the modules loaded and those that failed to load
+      - name: Summary
+        if: always() && steps.install.outcome == 'success'
+        run: |
+          tr -d '\r' < smoke.log > smoke.txt
+          {
+            echo "### ${{ matrix.check.job }}"
+            echo
+            echo "Installer: \`$(basename "$(find installer -type f \( -name '*.deb' -o -name '*.pkg' -o -name '*.exe' \) | head -1)")\`"
+            echo
+            echo "| Test | Modules | Not loaded |"
+            echo "|-|-|-|"
+            sed -nE 's/^ *Start +([0-9]+): (.*)$/\1 \2/p' smoke.txt | while read -r n name; do
+              count=$(sed -nE "s/^$n: ([0-9]+) modules$/\1/p" smoke.txt | tail -1)
+              failed=$(sed -nE "s/^$n: .*Error loading module \"([^\"]*)\".*/\1/p" smoke.txt | sed -E 's#.*[/\\]##' | sort -u | paste -sd ' ' -)
+              echo "| $name | ${count:-none} | ${failed:-} |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # the installer added its bin to the machine's PATH, and the uninstaller removes it
       - name: PATH
