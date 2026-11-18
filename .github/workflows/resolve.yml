@@ -5,8 +5,7 @@ name: Resolve the bundle
 # bundle.json's, each replaced by an input that is set (a commit, or a branch or tag taken at its head now). The
 # stagings come from the registry, by staging-pull, from ghcr.io/openDAQ/staging/<staging> by the commit each was
 # built of; a module's is asked for by the core it was built against too, so the modules of one bundle share its
-# core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed; a module after
-# the core is in the run, which its stage then does not pull again.
+# core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed.
 
 on:
   workflow_call:
@@ -186,7 +185,6 @@ jobs:
                   for entry in wanted if staging_of(entry) not in missing]
           print(f"missing, staged here: {missing or 'none'}")
 
-          # the run's summary: each staging's commit and where it comes from
           revision, repository = json.loads(os.environ["REVISIONS"]), json.loads(os.environ["REPOSITORIES"])
           summary = ["| Staging | Revision | From |", "|-|-|-|"]
           for staging, sha in revision.items():
@@ -247,7 +245,7 @@ jobs:
       && contains(fromJSON(needs.revisions.outputs.missing), 'mqtt-module')
     permissions:
       contents: read
-      packages: write     # asked for by the stage.yml's push, which is never run from here
+      packages: write
     uses: openDAQ/MQTTStreamingModule/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['mqtt-module'] }}
@@ -264,7 +262,7 @@ jobs:
       && contains(fromJSON(needs.revisions.outputs.missing), 'lt-streaming-modules')
     permissions:
       contents: read
-      packages: write     # asked for by the stage.yml's push, which is never run from here
+      packages: write
     uses: openDAQ/LTStreamingModulesModern/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['lt-streaming-modules'] }}
@@ -281,7 +279,7 @@ jobs:
       && contains(fromJSON(needs.revisions.outputs.missing), 'asam-cmp-modules')
     permissions:
       contents: read
-      packages: write     # asked for by the stage.yml's push, which is never run from here
+      packages: write
     uses: openDAQ/ASAM-CMP-Modules/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['asam-cmp-modules'] }}

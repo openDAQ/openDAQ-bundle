@@ -3,8 +3,7 @@ name: Assemble the bundle
 # The bundle's installers assembled from stagings, without compiling. The stagings are artifacts of this run, laid
 # in by resolve.yml, <staging>-staging-<job>. reusable.yml builds each platform as the stagings were built:
 # the stagings unpacked each into its own folder, given to the bundle as BUNDLE_PREFIX_<STAGING> (configure preset
-# bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer packed (package preset installer). Each
-# installer is then installed as a user would and smoke-checked by tests/installed.
+# bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer packed (package preset installer).
 
 on:
   workflow_call:
@@ -63,7 +62,7 @@ jobs:
               checks.append({"job": job, "runner": p["runner"], "generator": p["generator"]})
 
           # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
-          # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; NSIS packs
+          # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; on Windows NSIS packs the installer
           packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8", "libx11-6",
                          "libxrandr2", "libxcursor1", "libxi6", "libgl1", "libudev1", "libfreetype6", "libssl3"]},
                        {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
@@ -85,7 +84,7 @@ jobs:
       cmake-presets: ${{ needs.configure.outputs.cmake-presets }}
       cpack-presets: ${{ needs.configure.outputs.cpack-presets }}
 
-  # installed as a user would, everything selected, and smoke-checked
+  # each installer installed as a user would, everything selected, and smoke-checked by tests/installed
   check:
     name: Check ${{ matrix.check.job }}
     needs: [configure, build]
@@ -129,10 +128,9 @@ jobs:
         run: |
           cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=${{ steps.install.outputs.prefix }}
           cmake --build build/installed --config Release
-          ctest --test-dir build/installed -C Release --verbose 2>&1 | tee smoke.log      # each module loaded, by its id
+          ctest --test-dir build/installed -C Release --verbose 2>&1 | tee smoke.log      # --verbose: the log lists each module loaded, which Summary reads
           exit "${PIPESTATUS[0]}"
 
-      # the run's summary: the installer, and per test the modules loaded and those that failed to load
       - name: Summary
         if: always() && steps.install.outcome == 'success'
         run: |
