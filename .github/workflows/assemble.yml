@@ -77,7 +77,7 @@ jobs:
   build:
     name: Build
     needs: configure
-    uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@bundle/extract-each-artifact-into-its-dir
+    uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@v4
     with:
       include-jobs: ${{ needs.configure.outputs.jobs }}
       packages: ${{ needs.configure.outputs.packages }}
