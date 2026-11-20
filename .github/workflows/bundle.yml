@@ -3,7 +3,8 @@ name: Bundle
 # The bundle's installers: resolve.yml lays the stagings of the bundle's commits into this run, assemble.yml builds
 # the installers from them. A layer's revision can be given as an input (a commit, or a branch or tag taken at its
 # head now), in place of bundle.json's; a module can be left out (exclude-stagings). Called by the bundle's own
-# triggers and by a layer's CI.
+# triggers and by a layer's CI. The installers are published to ghcr.io/<owner>/bundle/native only from the bundle's
+# main and release/**, as bundle.json has them: never from a pull request, an input given, or another repository.
 
 on:
   workflow_dispatch:
@@ -59,6 +60,8 @@ on:
         type: string
         default: ""
   pull_request:
+  push:
+    branches: [main, "release/**"]
 
 permissions:
   contents: read
@@ -86,3 +89,18 @@ jobs:
     with:
       revisions: ${{ needs.resolve.outputs.revisions }}
       platforms: ${{ needs.resolve.outputs.platforms }}
+
+  publish:
+    name: Publish bundle
+    needs: assemble
+    if: >-
+      github.repository == 'openDAQ/openDAQ-bundle' && github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+      && format('{0}{1}{2}{3}{4}{5}', inputs.opendaq, inputs.opcua-modules, inputs.mqtt-module,
+                inputs.lt-streaming-modules, inputs.asam-cmp-modules, inputs.exclude-stagings) == ''
+    permissions:
+      contents: read
+      packages: write
+    uses: openDAQ/openDAQ-CI/.github/workflows/staging-push.yml@v4
+    with:
+      staging-packages: ${{ needs.assemble.outputs.staging-push }}

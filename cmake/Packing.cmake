@@ -48,6 +48,16 @@ if (BUNDLE_TRIPLET)
 endif()
 opendaq_compose_package_file_name()
 
+# what the packages are built from, each layer's commit, dependencies.<staging>.revision in staging-meta.json: the
+# bundle's identity when published
+foreach(_entry IN LISTS BUNDLE_LAYERS)
+    string(REPLACE "=" ";" _pair "${_entry}")
+    list(GET _pair 0 _layer)
+    list(GET _pair 1 _staging)
+    string(TOUPPER "${_layer}" _upper)
+    opendaq_set_metadata_field(dependencies ${_staging} revision VALUE "${BUNDLE_REVISION_${_upper}}")
+endforeach()
+
 set(CPACK_PACKAGE_NAME "${CPACK_OPENDAQ_META_PACKAGE_NAME}")
 set(CPACK_PACKAGE_VENDOR "openDAQ d.o.o.")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "openDAQ SDK with its modules")
