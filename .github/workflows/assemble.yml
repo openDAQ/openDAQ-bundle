@@ -14,6 +14,10 @@ on:
       platforms:
         description: "The platforms: a JSON list of {job, triplet, generator, runner} (resolve.yml's)"
         type: string
+    outputs:
+      staging-push:
+        description: "staging-push's input publishing the installers, identified by the commits they are built from"
+        value: ${{ jobs.configure.outputs.staging-push }}
 
 permissions:
   contents: read
@@ -28,6 +32,7 @@ jobs:
       cmake-presets: ${{ steps.configure.outputs.cmake-presets }}
       cpack-presets: ${{ steps.configure.outputs.cpack-presets }}
       checks: ${{ steps.configure.outputs.checks }}
+      staging-push: ${{ steps.configure.outputs.staging-push }}
     steps:
       - name: Configure
         id: configure
@@ -35,6 +40,7 @@ jobs:
         env:
           REVISIONS: ${{ inputs.revisions }}
           PLATFORMS: ${{ inputs.platforms }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           import json, os
 
@@ -67,8 +73,14 @@ jobs:
                          "libxrandr2", "libxcursor1", "libxi6", "libgl1", "libudev1", "libfreetype6", "libssl3"]},
                        {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
 
-          outputs = {"jobs": [p["job"] for p in platforms], "packages": packages,
-                     "cmake-presets": cmake_presets, "cpack-presets": cpack_presets, "checks": checks}
+          # the installers in the registry: an index per bundle, idx-<sha256> of the bundle's commit and its layers';
+          # a package per platform, pkg-<sha256> of those and its triplet (staging-meta.json's dependencies, package)
+          commits = ["org.opencontainers.image.revision"] + [f"com.opendaq.dependencies.{s}.revision" for s in revision]
+          staging_push = [{"path": f"ghcr.io/{os.environ['OWNER']}/bundle/native", "artifacts": ["package-*/bundle"],
+                           "idx-identity": commits, "pkg-identity": commits + ["com.opendaq.package.triplet"]}]
+
+          outputs = {"jobs": [p["job"] for p in platforms], "packages": packages, "cmake-presets": cmake_presets,
+                     "cpack-presets": cpack_presets, "checks": checks, "staging-push": staging_push}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
