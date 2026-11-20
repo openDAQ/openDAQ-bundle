@@ -4,8 +4,8 @@ name: Bundle
 # the installers from them. A layer's revision can be given as an input (a commit, or a branch or tag taken at its
 # head now), in place of bundle.json's; a module can be left out (exclude-stagings). Called by the bundle's own
 # triggers and by a layer's CI. The installers are published to ghcr.io/<owner>/bundle/native only from the bundle's
-# main and release/**, by a push or by hand (the inputs given make an identity of their own): never from a pull
-# request or another repository.
+# main and release/**, by a push or by hand (the inputs given make an identity of their own; skip-staging-push
+# builds only): never from a pull request or another repository.
 
 on:
   workflow_dispatch:
@@ -34,6 +34,10 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
         type: string
         default: ""
+      skip-staging-push:
+        description: "Build only, keep the installers as artifacts of the run"
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       opendaq:
@@ -96,7 +100,7 @@ jobs:
     needs: assemble
     if: >-
       github.repository == 'openDAQ/openDAQ-bundle' && github.event_name != 'pull_request'
-      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && !inputs.skip-staging-push
     permissions:
       contents: read
       packages: write
