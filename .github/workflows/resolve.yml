@@ -212,7 +212,7 @@ jobs:
     permissions:
       contents: read
       packages: write     # asked for by the stage.yml's push, which is never run from here
-    uses: openDAQ/openDAQ/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/openDAQ/.github/workflows/stage.yml@main
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
