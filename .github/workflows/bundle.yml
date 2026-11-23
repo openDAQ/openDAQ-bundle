@@ -9,8 +9,10 @@ name: Bundle
 #
 # Temporary, on bundle/integration-test-removal, the target of openDAQ-CI's integration-tests.yml: one platform,
 # ubuntu-22.04 x86_64 gcc (resolve.yml's JOBS), and the stagings the integration tests load, opendaq, opcua-modules and
-# lt-streaming-modules (exclude-stagings' default); everything else is neither pulled, staged nor packed. A caller
-# grants "packages: write": the layers' stage.yml ask for it (their push, never run from here).
+# lt-streaming-modules (exclude-stagings' default); everything else is neither pulled, staged nor packed. A layer
+# staged here treats no compiler warning as an error (warnings-as-errors' default), so a module built against a newer
+# core does not fail on its new warnings. A caller grants "packages: write": the layers' stage.yml ask for it (their
+# push, never run from here).
 
 on:
   workflow_dispatch:
@@ -39,6 +41,10 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq). Temporary default: those the integration tests do not load"
         type: string
         default: "mqtt-module;asam-cmp-modules"
+      warnings-as-errors:
+        description: "Compiler warnings fail the layers staged in this run (<prefix>_RELEASE_WARNINGS_AS_ERRORS). Temporary default: false"
+        type: boolean
+        default: false
       skip-staging-push:
         description: "Build only, keep the installers as artifacts of the run"
         type: boolean
@@ -69,6 +75,10 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq). Temporary default: those the integration tests do not load"
         type: string
         default: "mqtt-module;asam-cmp-modules"
+      warnings-as-errors:
+        description: "Compiler warnings fail the layers staged in this run (<prefix>_RELEASE_WARNINGS_AS_ERRORS). Temporary default: false"
+        type: boolean
+        default: false
   pull_request:
   push:
     branches: [main, "release/**"]
@@ -91,6 +101,7 @@ jobs:
       lt-streaming-modules: ${{ inputs.lt-streaming-modules }}
       asam-cmp-modules: ${{ inputs.asam-cmp-modules }}
       exclude-stagings: ${{ inputs.exclude-stagings }}
+      warnings-as-errors: ${{ inputs.warnings-as-errors }}     # push and pull_request have no inputs: ''
 
   assemble:
     name: Assemble bundle

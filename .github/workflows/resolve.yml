@@ -5,7 +5,8 @@ name: Resolve the bundle
 # bundle.json's, each replaced by an input that is set (a commit, or a branch or tag taken at its head now). The
 # stagings come from the registry, by staging-pull, from ghcr.io/openDAQ/staging/<staging> by the commit each was
 # built of; a module's is asked for by the core it was built against too, so the modules of one bundle share its
-# core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed.
+# core. A staging the registry lacks is staged here by its layer's stage.yml, called, never pushed, with the CMake cache
+# variables the bundle sets (cache-variables): whether a compiler warning fails the build (warnings-as-errors).
 
 on:
   workflow_call:
@@ -34,6 +35,10 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
         type: string
         default: ""
+      warnings-as-errors:
+        description: "true or false: compiler warnings fail the layers staged here (empty: WARNINGS_AS_ERRORS below)"
+        type: string
+        default: ""
     outputs:
       revisions:
         description: "The commit of each staging's layer: a JSON object, staging → full sha"
@@ -54,6 +59,7 @@ jobs:
       revisions: ${{ steps.revisions.outputs.revisions }}
       platforms: ${{ steps.revisions.outputs.platforms }}
       exclude-jobs: ${{ steps.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ steps.revisions.outputs.cache-variables }}
       staging-artifacts: ${{ steps.find.outputs.staging-artifacts }}
       missing: ${{ steps.find.outputs.missing }}
     steps:
@@ -94,6 +100,14 @@ jobs:
           STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
                       "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
           REPOSITORIES = {staging: layer for layer, staging in STAGINGS.items()}
+          # a staging → its layer's option prefix: the utils make warnings errors in a release build (-Werror, /WX) by
+          # <prefix>_RELEASE_WARNINGS_AS_ERRORS, ON by default. ASAM-CMP-Modules' ASAM-CMP-Library makes them errors on
+          # its own, whatever this says
+          PREFIXES = {"opendaq": "OPENDAQ", "opcua-modules": "DAQMODULES_OPCUA", "mqtt-module": "DAQMODULES_MQTT",
+                      "lt-streaming-modules": "DAQMODULES_LT_STREAMING", "asam-cmp-modules": "ASAM_CMP"}
+          # whether warnings are errors when no input says (push, pull_request). Temporary, for the integration tests:
+          # not, so a module built against a newer core does not fail on its new warnings (the layers' own: they are)
+          WARNINGS_AS_ERRORS = False
 
           inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
 
@@ -116,6 +130,16 @@ jobs:
           if "opendaq" in excluded:
               sys.exit("::error::exclude-stagings leaves out opendaq, the core: the modules are built against it")
 
+          # the cache variables each layer's stage takes, for every staging (a compact JSON object each): its option
+          # off when warnings are no errors, else none, the layer's own setting
+          value = inputs.get("warnings-as-errors")
+          given = "" if value is None else str(value).strip().lower()
+          if given not in ("", "true", "false"):
+              sys.exit(f"::error::warnings-as-errors is true or false, not {value!r}")
+          warnings_as_errors = given == "true" if given else WARNINGS_AS_ERRORS
+          cache_variables = {staging: json.dumps({} if warnings_as_errors else {f"{prefix}_RELEASE_WARNINGS_AS_ERRORS": False})
+                             for staging, prefix in PREFIXES.items()}
+
           # bundle.json's revisions, each replaced by an input that is set; the stagings left out dropped
           revision = {}
           for layer, ref in json.load(open("bundle.json"))["layers"].items():
@@ -128,7 +152,8 @@ jobs:
           platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner}
                        for job, (triplet, generator, runner) in JOBS.items()]
           outputs = {"revisions": revision, "platforms": platforms, "exclude-jobs": EXCLUDE_JOBS,
-                     "repositories": {staging: REPOSITORIES[staging] for staging in revision}}
+                     "repositories": {staging: REPOSITORIES[staging] for staging in revision},
+                     "cache-variables": cache_variables}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
@@ -208,6 +233,8 @@ jobs:
     with:
       staging-artifacts: ${{ needs.revisions.outputs.staging-artifacts }}
 
+  # the core's stage.yml from its bundle/stagings, as the modules', which takes cache-variables; main's does not yet
+  # (temporary). The commit staged is ref's, whichever branch the workflow is taken from
   stage-opendaq:
     name: Stage openDAQ
     needs: revisions
@@ -215,10 +242,11 @@ jobs:
     permissions:
       contents: read
       packages: write     # asked for by the stage.yml's push, which is never run from here
-    uses: openDAQ/openDAQ/.github/workflows/stage.yml@main
+    uses: openDAQ/openDAQ/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ fromJSON(needs.revisions.outputs.cache-variables)['opendaq'] }}
 
   # after the core is in the run, pulled or staged, so the module's stage does not pull it again
   stage-opcua-modules:
@@ -232,11 +260,12 @@ jobs:
     permissions:
       contents: read
       packages: write     # asked for by the stage.yml's push, which is never run from here
-    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings-no-werror
+    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opcua-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ fromJSON(needs.revisions.outputs.cache-variables)['opcua-modules'] }}
 
   stage-mqtt-module:
     name: Stage MQTTStreamingModule
@@ -254,6 +283,7 @@ jobs:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['mqtt-module'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ fromJSON(needs.revisions.outputs.cache-variables)['mqtt-module'] }}
 
   stage-lt-streaming-modules:
     name: Stage LTStreamingModulesModern
@@ -271,6 +301,7 @@ jobs:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['lt-streaming-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ fromJSON(needs.revisions.outputs.cache-variables)['lt-streaming-modules'] }}
 
   stage-asam-cmp-modules:
     name: Stage ASAM-CMP-Modules
@@ -288,3 +319,4 @@ jobs:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['asam-cmp-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
       exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+      cache-variables: ${{ fromJSON(needs.revisions.outputs.cache-variables)['asam-cmp-modules'] }}

@@ -75,6 +75,7 @@ cmake --build build/x64/gcc/release
 | `BUNDLE_TRIPLET` | the utils' | The triplet the packages are named by |
 | `BUNDLE_VERSION` | `bundle.json`'s | The version of the packages |
 | `BUNDLE_ENABLE_TESTS` | `OFF` | Build the tests of the layers built from sources |
+| `BUNDLE_WARNINGS_AS_ERRORS` | `OFF` (temporarily; the layers' own: `ON`) | Compiler warnings fail a release build of the layers built from sources (`<prefix>_RELEASE_WARNINGS_AS_ERRORS` of each, e.g. `DAQMODULES_OPCUA_RELEASE_WARNINGS_AS_ERRORS`). In CI, `bundle.yml`'s input `warnings-as-errors` does the same for the layers staged in the run. ASAM-CMP-Library, which ASAM-CMP-Modules fetches, makes warnings errors on its own |
 
 Pass options at configure time:
 

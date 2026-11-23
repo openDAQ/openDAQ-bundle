@@ -16,6 +16,9 @@ endif()
 set(BUNDLE_STAGINGS "opendaq;opcua-modules;mqtt-module;lt-streaming-modules;asam-cmp-modules"
     CACHE STRING "The stagings the bundle has")
 option(BUNDLE_ENABLE_TESTS "Build the layers' tests, when they are built from sources" OFF)
+# temporary default OFF, as bundle.yml's warnings-as-errors: a module built against a newer core does not fail on its new
+# warnings (the layers' own: ON)
+option(BUNDLE_WARNINGS_AS_ERRORS "Compiler warnings fail a release build of the layers, when they are built from sources" OFF)
 
 include(FetchContent)
 
