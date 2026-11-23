@@ -6,6 +6,11 @@ name: Bundle
 # triggers and by a layer's CI. The installers are published to ghcr.io/<owner>/bundle/native only from the bundle's
 # main and release/**, by a push or by hand (the inputs given make an identity of their own; skip-staging-push
 # builds only): never from a pull request or another repository.
+#
+# Temporary, on bundle/integration-test-removal, the target of openDAQ-CI's integration-tests.yml: one platform,
+# ubuntu-22.04 x86_64 gcc (resolve.yml's JOBS), and the stagings the integration tests load, opendaq, opcua-modules and
+# lt-streaming-modules (exclude-stagings' default); everything else is neither pulled, staged nor packed. A caller
+# grants "packages: write": the layers' stage.yml ask for it (their push, never run from here).
 
 on:
   workflow_dispatch:
@@ -31,9 +36,9 @@ on:
         type: string
         default: ""
       exclude-stagings:
-        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq). Temporary default: those the integration tests do not load"
         type: string
-        default: ""
+        default: "mqtt-module;asam-cmp-modules"
       skip-staging-push:
         description: "Build only, keep the installers as artifacts of the run"
         type: boolean
@@ -61,9 +66,9 @@ on:
         type: string
         default: ""
       exclude-stagings:
-        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq). Temporary default: those the integration tests do not load"
         type: string
-        default: ""
+        default: "mqtt-module;asam-cmp-modules"
   pull_request:
   push:
     branches: [main, "release/**"]

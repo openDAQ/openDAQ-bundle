@@ -77,16 +77,19 @@ jobs:
           #   generator  the CPack generator of its installer
           #   runner     where the installer is installed and smoke-checked (tests/installed); it serves the smoke
           #              check, a debugging aid until the integration tests take the installers, and goes with it
+          # Temporary, while openDAQ-CI's integration-tests.yml calls this branch: only the platform the integration tests
+          # build and run on (Integration-tests' BUILD_JOB); the others come back once the tests pass
           JOBS = {
               # job                                          triplet                                 generator       runner
               "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04"),
-              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm"),
-              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022"),
-              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26"),
-              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel"),
+              # "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm"),
+              # "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022"),
+              # "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26"),
+              # "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel"),
           }
-          # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here
-          EXCLUDE_JOBS = ["manylinux*", "windows-*-x86-*"]
+          # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here. Every job
+          # of the layers' stage but the one platform above (temporary, with JOBS; was ["manylinux*", "windows-*-x86-*"])
+          EXCLUDE_JOBS = ["manylinux*", "windows-*", "macos-*", "*-armv8-*"]
           # a layer, named as its repository in bundle.json → its staging
           STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
                       "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
