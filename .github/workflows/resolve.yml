@@ -229,7 +229,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@main
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opcua-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
@@ -246,7 +246,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: openDAQ/MQTTStreamingModule/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/MQTTStreamingModule/.github/workflows/stage.yml@main
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['mqtt-module'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
@@ -263,7 +263,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: openDAQ/LTStreamingModulesModern/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/LTStreamingModulesModern/.github/workflows/stage.yml@main
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['lt-streaming-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
@@ -280,7 +280,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: openDAQ/ASAM-CMP-Modules/.github/workflows/stage.yml@bundle/stagings
+    uses: openDAQ/ASAM-CMP-Modules/.github/workflows/stage.yml@main
     with:
       ref: ${{ fromJSON(needs.revisions.outputs.revisions)['asam-cmp-modules'] }}
       opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
