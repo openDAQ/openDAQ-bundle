@@ -1,10 +1,10 @@
 {
     "version": "2026.11.0",
     "layers": {
-        "openDAQ": "1a82fa899b78e23ddcf61975eb9255b22e713808",
-        "OpcUaModules": "5cfded5f006a11131743901e3befa276d6efe14b",
-        "MQTTStreamingModule": "a94532cf583624e6c28d3626a2b56cf5d8378966",
-        "LTStreamingModulesModern": "cd5262365f34556c4a170f285b6a0fb43db6b835",
-        "ASAM-CMP-Modules": "94476536c44e596b41985555c56043eb4852d10f"
+        "openDAQ": "84fc1b252c2738b1a64bb5a5eaf7d432653ece93",
+        "OpcUaModules": "4cf5a9e1e0d3decd1e56c7f8bea6ba6b60421cf8",
+        "MQTTStreamingModule": "0659d20900164cedc2a232b5866de62b4163e87a",
+        "LTStreamingModulesModern": "3b69f30bc6801543f56f0c65be9fcae2b7047428",
+        "ASAM-CMP-Modules": "b38e9f64098ba7d8f66713854c786f751b20c328"
     }
 }
