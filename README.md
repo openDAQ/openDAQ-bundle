@@ -82,12 +82,22 @@ commit it is built against. On macOS use `shasum -a 256` in place of `sha256sum`
 
 ```bash
 # the sha256 of its arguments, key=value, sorted and joined by newlines
-pkg_hash() { printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1; }
+pkg_hash() {
+    printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1
+}
+
 # the core: its commit, the triplet
-core_hash() { pkg_hash org.opencontainers.image.revision=$1 com.opendaq.package.triplet=$2; }
+core_hash() {
+    pkg_hash org.opencontainers.image.revision=$1 \
+             com.opendaq.package.triplet=$2
+}
+
 # a module: its commit, the core's commit it is built against, the triplet
-module_hash() { pkg_hash org.opencontainers.image.revision=$1 com.opendaq.dependencies.opendaq.revision=$2 \
-                         com.opendaq.package.triplet=$3; }
+module_hash() {
+    pkg_hash org.opencontainers.image.revision=$1 \
+             com.opendaq.dependencies.opendaq.revision=$2 \
+             com.opendaq.package.triplet=$3
+}
 
 # the revisions, full commits: the core, and the modules built against it
 rev_core=<openDAQ commit>
