@@ -68,8 +68,13 @@ cmake --preset="x64/gcc/release" -DBUNDLE_STAGINGS="opendaq;opcua-modules;mqtt-m
 A staging is what a repository publishes, prebuilt, to `ghcr.io/opendaq/staging/<staging>`: one package per platform.
 The bundle can take every part prebuilt instead of building it, and then only packs the installer.
 
-Read the registry with [oras](https://oras.land/docs/installation), logged in with a GitHub token that has
-`read:packages`:
+It needs two tools installed:
+
+- [GitHub CLI](https://cli.github.com) (`gh`): `brew install gh`, `winget install GitHub.cli`, or the
+  [Linux packages](https://github.com/cli/cli/blob/trunk/docs/install_linux.md)
+- [oras](https://oras.land/docs/installation): `brew install oras`, `winget install oras`, or a release archive
+
+The registry is read with oras, logged in with a GitHub token that has `read:packages`:
 
 ```bash
 gh auth refresh -h github.com -s read:packages
