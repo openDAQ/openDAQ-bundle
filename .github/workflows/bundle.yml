@@ -1,43 +1,19 @@
 name: Bundle
 
-# The bundle's installers: resolve.yml lays the stagings of the bundle's commits into this run, assemble.yml builds
-# the installers from them. A layer's revision can be given as an input (a commit, or a branch or tag taken at its
-# head now), in place of bundle.json's; a module can be left out (exclude-stagings). Called by the bundle's own
-# triggers and by a layer's CI. The installers are published to ghcr.io/<owner>/bundle/native only from the bundle's
-# main and release/**, by a push or by hand (the inputs given make an identity of their own; skip-staging-push
-# builds only): never from a pull request or another repository.
+# The bundle's installers, built of a commit per layer and not published: the jobs Resolve revisions to Stage <layer>
+# lay every staging into this run, Configure and Build pack the installers from them. ci.yml checks them, stage.yml
+# publishes them.
+#
+# The commits are bundle.json's, each replaced by an input that is set (a commit, or a branch or tag taken at its head
+# now); a module can be left out (exclude-stagings). The stagings come from the registry, by staging-pull, from
+# ghcr.io/openDAQ/staging/<staging> by the commit each was built of; a module's is asked for by the core it was built
+# against too, so the modules of one bundle share its core. A staging the registry lacks is staged here by its
+# layer's stage.yml, called, never pushed. Then reusable.yml builds each platform as the stagings were built: the
+# stagings, artifacts <staging>-staging-<job>, unpacked each into its own folder, given to the bundle as
+# BUNDLE_PREFIX_<STAGING> (configure preset bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer
+# packed (package preset installer), into the artifact package-<job>.
 
 on:
-  workflow_dispatch:
-    inputs:
-      opendaq:
-        description: "openDAQ: a commit, branch or tag (empty: bundle.json's)"
-        type: string
-        default: ""
-      opcua-modules:
-        description: "OpcUaModules: a commit, branch or tag (empty: bundle.json's)"
-        type: string
-        default: ""
-      mqtt-module:
-        description: "MQTTStreamingModule: a commit, branch or tag (empty: bundle.json's)"
-        type: string
-        default: ""
-      lt-streaming-modules:
-        description: "LTStreamingModulesModern: a commit, branch or tag (empty: bundle.json's)"
-        type: string
-        default: ""
-      asam-cmp-modules:
-        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
-        type: string
-        default: ""
-      exclude-stagings:
-        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
-        type: string
-        default: ""
-      skip-staging-push:
-        description: "Build only, keep the installers as artifacts of the run"
-        type: boolean
-        default: false
   workflow_call:
     inputs:
       opendaq:
@@ -64,46 +40,333 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
         type: string
         default: ""
-  pull_request:
-  push:
-    branches: [main, "release/**"]
+    outputs:
+      checks:
+        description: "The installers to check: a JSON list of {job, runner, generator}, the artifact package-<job>"
+        value: ${{ jobs.configure.outputs.checks }}
+      staging-push:
+        description: "staging-push's input publishing the installers, identified by the commits they are built from"
+        value: ${{ jobs.configure.outputs.staging-push }}
 
 permissions:
   contents: read
   packages: read
 
 jobs:
-  resolve:
-    name: Resolve stagings
+  revisions:
+    name: Resolve revisions
+    runs-on: ubuntu-latest
+    outputs:
+      revisions: ${{ steps.revisions.outputs.revisions }}
+      platforms: ${{ steps.revisions.outputs.platforms }}
+      exclude-jobs: ${{ steps.revisions.outputs.exclude-jobs }}
+      staging-artifacts: ${{ steps.find.outputs.staging-artifacts }}
+      missing: ${{ steps.find.outputs.missing }}
+    steps:
+      # bundle.json of this workflow's own commit, whoever calls it
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+
+      - name: Resolve revisions
+        id: revisions
+        shell: python3 {0}
+        env:
+          INPUTS: ${{ toJSON(inputs) }}
+        run: |
+          import json, os, re, subprocess, sys
+
+          # one entry per platform the bundle is assembled for:
+          #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
+          #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
+          #   generator  the CPack generator of its installer
+          #   runner     where the installer is installed and smoke-checked (tests/installed); it serves the smoke
+          #              check, a debugging aid until the integration tests take the installers, and goes with it
+          JOBS = {
+              # job                                          triplet                                 generator       runner
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04"),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm"),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022"),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26"),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel"),
+          }
+          # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here
+          EXCLUDE_JOBS = ["manylinux*", "windows-*-x86-*"]
+          # a layer, named as its repository in bundle.json → its staging
+          STAGINGS = {"openDAQ": "opendaq", "OpcUaModules": "opcua-modules", "MQTTStreamingModule": "mqtt-module",
+                      "LTStreamingModulesModern": "lt-streaming-modules", "ASAM-CMP-Modules": "asam-cmp-modules"}
+          REPOSITORIES = {staging: layer for layer, staging in STAGINGS.items()}
+
+          inputs = json.loads(os.environ["INPUTS"] or "{}") or {}
+
+          def commit(staging, ref):
+              """A full sha as it is; a branch or a tag → its commit, as the repository has it now."""
+              if re.fullmatch(r"[0-9a-f]{40}", ref):
+                  return ref
+              url = f"https://github.com/openDAQ/{REPOSITORIES[staging]}.git"
+              out = subprocess.run(["git", "ls-remote", url, ref], capture_output=True, text=True, check=True).stdout
+              refs = dict(reversed(line.split("\t")) for line in out.splitlines())
+              for name in (f"refs/tags/{ref}^{{}}", f"refs/tags/{ref}", f"refs/heads/{ref}"):
+                  if name in refs:
+                      return refs[name]
+              sys.exit(f"::error::{REPOSITORIES[staging]} has no branch or tag {ref!r} (a commit is given in full)")
+
+          # the stagings left out; never the core, which the modules are built against
+          excluded = [s.strip() for s in (inputs.get("exclude-stagings") or "").split(";") if s.strip()]
+          if unknown := [s for s in excluded if s not in REPOSITORIES]:
+              sys.exit(f"::error::exclude-stagings names {unknown}, which the bundle has not; it has {list(REPOSITORIES)}")
+          if "opendaq" in excluded:
+              sys.exit("::error::exclude-stagings leaves out opendaq, the core: the modules are built against it")
+
+          # bundle.json's revisions, each replaced by an input that is set; the stagings left out dropped
+          revision = {}
+          for layer, ref in json.load(open("bundle.json"))["layers"].items():
+              staging = STAGINGS[layer]
+              if staging in excluded:
+                  continue
+              given = (inputs.get(staging) or "").strip()
+              revision[staging] = commit(staging, given or ref)
+
+          platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner}
+                       for job, (triplet, generator, runner) in JOBS.items()]
+          outputs = {"revisions": revision, "platforms": platforms, "exclude-jobs": EXCLUDE_JOBS,
+                     "repositories": {staging: REPOSITORIES[staging] for staging in revision}}
+          print(json.dumps(outputs, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for key, value in outputs.items():
+                  f.write(f"{key}={json.dumps(value)}\n")
+
+      - name: List wanted stagings
+        id: wanted
+        shell: python3 {0}
+        env:
+          REVISIONS: ${{ steps.revisions.outputs.revisions }}
+          PLATFORMS: ${{ steps.revisions.outputs.platforms }}
+        run: |
+          import json, os
+
+          revision = json.loads(os.environ["REVISIONS"])
+
+          # every staging of every platform, by its triplet, into an artifact named as the staging's own stage names
+          # it; optional: the check tells what is there
+          wanted = []
+          for platform in json.loads(os.environ["PLATFORMS"]):
+              job, triplet = platform["job"], platform["triplet"]
+              for staging, sha in revision.items():
+                  annotations = {"org.opencontainers.image.revision": sha, "com.opendaq.package.triplet": triplet}
+                  if staging != "opendaq":
+                      annotations["com.opendaq.dependencies.opendaq.revision"] = revision["opendaq"]
+                  wanted.append({"artifact": f"{staging}-staging-{job}",
+                               "packages": [{"path": f"ghcr.io/openDAQ/staging/{staging}",
+                                             "annotations": annotations, "optional": True}]})
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"packages={json.dumps(wanted)}\n")
+
+      - name: Find existing stagings
+        id: check
+        uses: openDAQ/openDAQ-CI/.github/actions/staging-check@v4
+        with:
+          packages: ${{ steps.wanted.outputs.packages }}
+
+      # a staging missing on any platform is staged here, on all of them; the rest is pulled
+      - name: Find missing stagings
+        id: find
+        shell: python3 {0}
+        env:
+          WANTED: ${{ steps.wanted.outputs.packages }}
+          RESOLVED: ${{ steps.check.outputs.resolved }}
+          REVISIONS: ${{ steps.revisions.outputs.revisions }}
+          REPOSITORIES: ${{ steps.revisions.outputs.repositories }}
+        run: |
+          import json, os
+
+          wanted = json.loads(os.environ["WANTED"])
+          found = {entry["artifact"] for entry in json.loads(os.environ["RESOLVED"]) if entry["packages"]}
+          staging_of = lambda entry: entry["packages"][0]["path"].rsplit("/", 1)[1]
+          missing = sorted({staging_of(entry) for entry in wanted if entry["artifact"] not in found})
+
+          pull = [{**entry, "packages": [{k: v for k, v in package.items() if k != "optional"} for package in entry["packages"]]}
+                  for entry in wanted if staging_of(entry) not in missing]
+          print(f"missing, staged here: {missing or 'none'}")
+
+          revision, repository = json.loads(os.environ["REVISIONS"]), json.loads(os.environ["REPOSITORIES"])
+          summary = ["| Staging | Revision | From |", "|-|-|-|"]
+          for staging, sha in revision.items():
+              link = f"[`{sha[:12]}`](https://github.com/openDAQ/{repository[staging]}/commit/{sha})"
+              summary.append(f"| {staging} | {link} | {'staged in this run' if staging in missing else 'registry'} |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(summary) + "\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"staging-artifacts={json.dumps(pull)}\n")
+              f.write(f"missing={json.dumps(missing)}\n")
+
+  pull:
+    name: Pull stagings
+    needs: revisions
+    if: needs.revisions.outputs.staging-artifacts != '[]'
+    uses: openDAQ/openDAQ-CI/.github/workflows/staging-pull.yml@v4
+    with:
+      staging-artifacts: ${{ needs.revisions.outputs.staging-artifacts }}
+
+  stage-opendaq:
+    name: Stage openDAQ
+    needs: revisions
+    if: contains(fromJSON(needs.revisions.outputs.missing), 'opendaq')
     permissions:
       contents: read
-      packages: write     # a missing staging's stage.yml asks for it; nothing is pushed from here
-    uses: ./.github/workflows/resolve.yml
+      packages: write     # asked for by the stage.yml's push, which is never run from here
+    uses: openDAQ/openDAQ/.github/workflows/stage.yml@main
     with:
-      opendaq: ${{ inputs.opendaq }}
-      opcua-modules: ${{ inputs.opcua-modules }}
-      mqtt-module: ${{ inputs.mqtt-module }}
-      lt-streaming-modules: ${{ inputs.lt-streaming-modules }}
-      asam-cmp-modules: ${{ inputs.asam-cmp-modules }}
-      exclude-stagings: ${{ inputs.exclude-stagings }}
+      ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
 
-  assemble:
-    name: Assemble bundle
-    needs: resolve
-    uses: ./.github/workflows/assemble.yml
-    with:
-      revisions: ${{ needs.resolve.outputs.revisions }}
-      platforms: ${{ needs.resolve.outputs.platforms }}
-
-  publish:
-    name: Publish bundle
-    needs: assemble
+  # after the core is in the run, pulled or staged, so the module's stage does not pull it again
+  stage-opcua-modules:
+    name: Stage OpcUaModules
+    needs: [revisions, pull, stage-opendaq]
     if: >-
-      github.repository == 'openDAQ/openDAQ-bundle' && github.event_name != 'pull_request'
-      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && !inputs.skip-staging-push
+      always() && needs.revisions.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.revisions.outputs.missing), 'opcua-modules')
     permissions:
       contents: read
       packages: write
-    uses: openDAQ/openDAQ-CI/.github/workflows/staging-push.yml@v4
+    uses: openDAQ/OpcUaModules/.github/workflows/stage.yml@main
     with:
-      staging-packages: ${{ needs.assemble.outputs.staging-push }}
+      ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opcua-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+
+  stage-mqtt-module:
+    name: Stage MQTTStreamingModule
+    needs: [revisions, pull, stage-opendaq]
+    if: >-
+      always() && needs.revisions.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.revisions.outputs.missing), 'mqtt-module')
+    permissions:
+      contents: read
+      packages: write
+    uses: openDAQ/MQTTStreamingModule/.github/workflows/stage.yml@main
+    with:
+      ref: ${{ fromJSON(needs.revisions.outputs.revisions)['mqtt-module'] }}
+      opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+
+  stage-lt-streaming-modules:
+    name: Stage LTStreamingModulesModern
+    needs: [revisions, pull, stage-opendaq]
+    if: >-
+      always() && needs.revisions.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.revisions.outputs.missing), 'lt-streaming-modules')
+    permissions:
+      contents: read
+      packages: write
+    uses: openDAQ/LTStreamingModulesModern/.github/workflows/stage.yml@main
+    with:
+      ref: ${{ fromJSON(needs.revisions.outputs.revisions)['lt-streaming-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+
+  stage-asam-cmp-modules:
+    name: Stage ASAM-CMP-Modules
+    needs: [revisions, pull, stage-opendaq]
+    if: >-
+      always() && needs.revisions.result == 'success'
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.pull.result)
+      && !contains(fromJSON('["failure", "cancelled"]'), needs.stage-opendaq.result)
+      && contains(fromJSON(needs.revisions.outputs.missing), 'asam-cmp-modules')
+    permissions:
+      contents: read
+      packages: write
+    uses: openDAQ/ASAM-CMP-Modules/.github/workflows/stage.yml@main
+    with:
+      ref: ${{ fromJSON(needs.revisions.outputs.revisions)['asam-cmp-modules'] }}
+      opendaq-ref: ${{ fromJSON(needs.revisions.outputs.revisions)['opendaq'] }}
+      exclude-jobs: ${{ needs.revisions.outputs.exclude-jobs }}
+
+  configure:
+    name: Configure
+    needs: revisions
+    runs-on: ubuntu-latest
+    outputs:
+      jobs: ${{ steps.configure.outputs.jobs }}
+      packages: ${{ steps.configure.outputs.packages }}
+      cmake-presets: ${{ steps.configure.outputs.cmake-presets }}
+      cpack-presets: ${{ steps.configure.outputs.cpack-presets }}
+      checks: ${{ steps.configure.outputs.checks }}
+      staging-push: ${{ steps.configure.outputs.staging-push }}
+    steps:
+      - name: Configure
+        id: configure
+        shell: python3 {0}
+        env:
+          REVISIONS: ${{ needs.revisions.outputs.revisions }}
+          PLATFORMS: ${{ needs.revisions.outputs.platforms }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          import json, os
+
+          # a staging → its layer, named as its repository (BUNDLE_REVISION_<LAYER>)
+          REPOSITORIES = {"opendaq": "openDAQ", "opcua-modules": "OpcUaModules", "mqtt-module": "MQTTStreamingModule",
+                          "lt-streaming-modules": "LTStreamingModulesModern", "asam-cmp-modules": "ASAM-CMP-Modules"}
+          revision = json.loads(os.environ["REVISIONS"])
+          platforms = json.loads(os.environ["PLATFORMS"])
+
+          packages, cmake_presets, cpack_presets, checks = [], [], [], []
+          for p in platforms:
+              job = p["job"]
+              # the commits resolved there, so configure takes the same ones and resolves no ref again
+              artifacts = []
+              cache_variables = {f"BUNDLE_REVISION_{REPOSITORIES[staging].upper()}": sha for staging, sha in revision.items()}
+              cache_variables["BUNDLE_STAGINGS"] = ";".join(revision)        # the stagings the revisions kept
+              for staging in revision:
+                  artifacts.append({"name": f"{staging}-staging-{job}", "dir": f"stagings/{staging}"})
+                  # the core's tarball carries its install prefix, opt/opendaq, except on Windows
+                  inside = "/opt/opendaq" if staging == "opendaq" and not job.startswith("windows-") else ""
+                  cache_variables[f"BUNDLE_PREFIX_{staging.upper()}"] = "${sourceDir}/stagings/" + staging + inside
+              packages.append({"match-jobs": [job], "artifacts": artifacts})
+              cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
+              cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": p["generator"], "package-preset": "installer"}]})
+              checks.append({"job": job, "runner": p["runner"], "generator": p["generator"]})
+
+          # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
+          # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; on Windows NSIS packs the installer
+          packages += [{"match-jobs": ["ubuntu-*"], "apt-install": ["dpkg-dev", "file", "libpcap0.8", "libx11-6",
+                         "libxrandr2", "libxcursor1", "libxi6", "libgl1", "libudev1", "libfreetype6", "libssl3"]},
+                       {"match-jobs": ["windows-*"], "choco-install": ["nsis"]}]
+
+          # the installers in the registry: an index per bundle, idx-<sha256> of the bundle's commit and its layers';
+          # a package per platform, pkg-<sha256> of those and its triplet (staging-meta.json's dependencies, package)
+          commits = ["org.opencontainers.image.revision"] + [f"com.opendaq.dependencies.{s}.revision" for s in revision]
+          staging_push = [{"path": f"ghcr.io/{os.environ['OWNER']}/bundle/native", "artifacts": ["package-*/bundle"],
+                           "idx-identity": commits, "pkg-identity": commits + ["com.opendaq.package.triplet"]}]
+
+          outputs = {"jobs": [p["job"] for p in platforms], "packages": packages, "cmake-presets": cmake_presets,
+                     "cpack-presets": cpack_presets, "checks": checks, "staging-push": staging_push}
+          print(json.dumps(outputs, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for key, value in outputs.items():
+                  f.write(f"{key}={json.dumps(value)}\n")
+
+  # once every staging is in the run, pulled or staged; a staging found in the registry skips its stage job
+  build:
+    name: Build
+    needs: [configure, pull, stage-opendaq, stage-opcua-modules, stage-mqtt-module, stage-lt-streaming-modules,
+            stage-asam-cmp-modules]
+    if: >-
+      always() && needs.configure.result == 'success'
+      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: openDAQ/openDAQ-CI/.github/workflows/reusable.yml@v4
+    with:
+      include-jobs: ${{ needs.configure.outputs.jobs }}
+      packages: ${{ needs.configure.outputs.packages }}
+      cmake-presets: ${{ needs.configure.outputs.cmake-presets }}
+      cpack-presets: ${{ needs.configure.outputs.cpack-presets }}
