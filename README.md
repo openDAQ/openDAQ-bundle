@@ -128,16 +128,6 @@ cpack --preset modules                                     # the modules, withou
 
 The packages land in `build/bundle-native/packages`, named `opendaq-<bundle|core|modules>-<version>-<triplet>`.
 
-## Tests
-
-A smoke check of an installed bundle, run by hand: the C++ API and the C binding each load every module of the
-prefix.
-
-```bash
-cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=/opt/opendaq
-cmake --build build/installed && ctest --test-dir build/installed --verbose
-```
-
 ## CI
 
 One workflow, [`bundle.yml`](.github/workflows/bundle.yml), builds the installers (DEB, NSIS, productbuild) for five
