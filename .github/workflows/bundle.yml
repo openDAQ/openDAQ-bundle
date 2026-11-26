@@ -1,8 +1,8 @@
 name: Bundle
 
-# The bundle's installers, built of a commit per layer and not published: the jobs Resolve revisions to Stage <layer>
-# lay every staging into this run, Configure and Build pack the installers from them. ci.yml checks them, stage.yml
-# publishes them.
+# The bundle's installers, built of a commit per layer: the jobs Resolve revisions to Stage <layer> lay every staging
+# into this run, Configure and Build pack the installers from them, Push publishes them to
+# ghcr.io/<owner>/bundle/native, identified by the commits they are built from.
 #
 # The commits are bundle.json's, each replaced by an input that is set (a commit, or a branch or tag taken at its head
 # now); a module can be left out (exclude-stagings). The stagings come from the registry, by staging-pull, from
@@ -11,9 +11,44 @@ name: Bundle
 # layer's stage.yml, called, never pushed. Then reusable.yml builds each platform as the stagings were built: the
 # stagings, artifacts <staging>-staging-<job>, unpacked each into its own folder, given to the bundle as
 # BUNDLE_PREFIX_<STAGING> (configure preset bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer
-# packed (package preset installer), into the artifact package-<job>.
+# packed (package preset installer), into the artifact package-<job>. Pushed from the bundle's own repository unless
+# skip-staging-push; called from another repository (a layer's CI), never.
 
 on:
+  pull_request:
+  push:
+    branches: [main, "release/**"]
+  workflow_dispatch:
+    inputs:
+      opendaq:
+        description: "openDAQ: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      opcua-modules:
+        description: "OpcUaModules: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      mqtt-module:
+        description: "MQTTStreamingModule: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      lt-streaming-modules:
+        description: "LTStreamingModulesModern: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      asam-cmp-modules:
+        description: "ASAM-CMP-Modules: a commit, branch or tag (empty: bundle.json's)"
+        type: string
+        default: ""
+      exclude-stagings:
+        description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
+        type: string
+        default: ""
+      skip-staging-push:
+        description: "Build only, keep the installers as artifacts of the run"
+        type: boolean
+        default: false
+
   workflow_call:
     inputs:
       opendaq:
@@ -40,13 +75,6 @@ on:
         description: "Stagings left out of the bundle, e.g. opcua-modules (;-separated; never opendaq)"
         type: string
         default: ""
-    outputs:
-      checks:
-        description: "The installers to check: a JSON list of {job, runner, generator}, the artifact package-<job>"
-        value: ${{ jobs.configure.outputs.checks }}
-      staging-push:
-        description: "staging-push's input publishing the installers, identified by the commits they are built from"
-        value: ${{ jobs.configure.outputs.staging-push }}
 
 permissions:
   contents: read
@@ -81,15 +109,13 @@ jobs:
           #   key        the reusable.yml job that packs it (its name picks the runner, the compiler, the generator)
           #   triplet    the stagings it takes: com.opendaq.package.triplet of the packages pulled from ghcr
           #   generator  the CPack generator of its installer
-          #   runner     where the installer is installed and smoke-checked (tests/installed); it serves the smoke
-          #              check, a debugging aid until the integration tests take the installers, and goes with it
           JOBS = {
-              # job                                          triplet                                 generator       runner
-              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB",          "ubuntu-22.04"),
-              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB",          "ubuntu-24.04-arm"),
-              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS",         "windows-2022"),
-              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild", "macos-26"),
-              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild", "macos-26-intel"),
+              # job                                          triplet                                 generator
+              "ubuntu-22.04-x86_64-ninja-gcc-release":       ("x86_64-linux-gcc-11-release",         "DEB"),
+              "ubuntu-22.04-armv8-ninja-gcc-release":        ("armv8-linux-gcc-11-release",          "DEB"),
+              "windows-2022-x86_64-msvs-v143-release":       ("x86_64-windows-msvc-143-release",     "NSIS"),
+              "macos-26-armv8-ninja-appleclang-21-release":  ("armv8-macos-apple-clang-21-release",  "productbuild"),
+              "macos-26-x86_64-ninja-appleclang-21-release": ("x86_64-macos-apple-clang-21-release", "productbuild"),
           }
           # the jobs of a layer's stage the bundle takes nothing from: not built when a layer is staged here
           EXCLUDE_JOBS = ["manylinux*", "windows-*-x86-*"]
@@ -128,8 +154,8 @@ jobs:
               given = (inputs.get(staging) or "").strip()
               revision[staging] = commit(staging, given or ref)
 
-          platforms = [{"job": job, "triplet": triplet, "generator": generator, "runner": runner}
-                       for job, (triplet, generator, runner) in JOBS.items()]
+          platforms = [{"job": job, "triplet": triplet, "generator": generator}
+                       for job, (triplet, generator) in JOBS.items()]
           outputs = {"revisions": revision, "platforms": platforms, "exclude-jobs": EXCLUDE_JOBS,
                      "repositories": {staging: REPOSITORIES[staging] for staging in revision}}
           print(json.dumps(outputs, indent=2))
@@ -301,7 +327,6 @@ jobs:
       packages: ${{ steps.configure.outputs.packages }}
       cmake-presets: ${{ steps.configure.outputs.cmake-presets }}
       cpack-presets: ${{ steps.configure.outputs.cpack-presets }}
-      checks: ${{ steps.configure.outputs.checks }}
       staging-push: ${{ steps.configure.outputs.staging-push }}
     steps:
       - name: Configure
@@ -320,7 +345,7 @@ jobs:
           revision = json.loads(os.environ["REVISIONS"])
           platforms = json.loads(os.environ["PLATFORMS"])
 
-          packages, cmake_presets, cpack_presets, checks = [], [], [], []
+          packages, cmake_presets, cpack_presets = [], [], []
           for p in platforms:
               job = p["job"]
               # the commits resolved there, so configure takes the same ones and resolves no ref again
@@ -335,7 +360,6 @@ jobs:
               packages.append({"match-jobs": [job], "artifacts": artifacts})
               cmake_presets.append({"match-jobs": [job], "configure-preset": "bundle-prefixes", "cache-variables": cache_variables})
               cpack_presets.append({"match-jobs": [job], "installers": [{"name": "bundle", "package": p["generator"], "package-preset": "installer"}]})
-              checks.append({"job": job, "runner": p["runner"], "generator": p["generator"]})
 
           # DEB names the libraries the stagings need in its Depends (dpkg-shlibdeps), so they must be there: ASAM's
           # libpcap, ref_fb's renderer's X11, GL, udev and freetype, LT's OpenSSL; on Windows NSIS packs the installer
@@ -350,7 +374,7 @@ jobs:
                            "idx-identity": commits, "pkg-identity": commits + ["com.opendaq.package.triplet"]}]
 
           outputs = {"jobs": [p["job"] for p in platforms], "packages": packages, "cmake-presets": cmake_presets,
-                     "cpack-presets": cpack_presets, "checks": checks, "staging-push": staging_push}
+                     "cpack-presets": cpack_presets, "staging-push": staging_push}
           print(json.dumps(outputs, indent=2))
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               for key, value in outputs.items():
@@ -370,3 +394,14 @@ jobs:
       packages: ${{ needs.configure.outputs.packages }}
       cmake-presets: ${{ needs.configure.outputs.cmake-presets }}
       cpack-presets: ${{ needs.configure.outputs.cpack-presets }}
+
+  push:
+    name: Push
+    needs: [configure, build]
+    if: github.repository == 'openDAQ/openDAQ-bundle' && !inputs.skip-staging-push
+    permissions:
+      contents: read
+      packages: write
+    uses: openDAQ/openDAQ-CI/.github/workflows/staging-push.yml@v4
+    with:
+      staging-packages: ${{ needs.configure.outputs.staging-push }}
