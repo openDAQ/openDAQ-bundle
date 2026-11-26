@@ -12,8 +12,8 @@ name: Bundle
 # stagings, artifacts <staging>-staging-<job>, unpacked each into its own folder, given to the bundle as
 # BUNDLE_PREFIX_<STAGING> (configure preset bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer
 # packed (package preset installer), into the artifact package-<job>. On schedule every layer is taken at its main,
-# not at bundle.json's. Pushed on schedule and by hand (unless
-# skip-staging-push), in the bundle's own repository; called from another repository (a layer's CI), never.
+# not at bundle.json's. Pushed on schedule and by hand (unless skip-staging-push), in the bundle's own repository;
+# called from another repository (a layer's CI), never.
 
 on:
   # Mondays, after the stagings of the layers (core 02:00, modules 05:00)
