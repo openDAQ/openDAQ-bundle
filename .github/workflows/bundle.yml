@@ -11,13 +11,13 @@ name: Bundle
 # layer's stage.yml, called, never pushed. Then reusable.yml builds each platform as the stagings were built: the
 # stagings, artifacts <staging>-staging-<job>, unpacked each into its own folder, given to the bundle as
 # BUNDLE_PREFIX_<STAGING> (configure preset bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer
-# packed (package preset installer), into the artifact package-<job>. Pushed from the bundle's own repository unless
-# skip-staging-push; called from another repository (a layer's CI), never.
+# packed (package preset installer), into the artifact package-<job>. Pushed on schedule and by hand (unless
+# skip-staging-push), in the bundle's own repository; called from another repository (a layer's CI), never.
 
 on:
-  pull_request:
-  push:
-    branches: [main, "release/**"]
+  # Mondays, after the stagings of the layers (core 02:00, modules 05:00)
+  schedule:
+    - cron: '0 8 * * 1'
   workflow_dispatch:
     inputs:
       opendaq:
