@@ -11,7 +11,8 @@ name: Bundle
 # layer's stage.yml, called, never pushed. Then reusable.yml builds each platform as the stagings were built: the
 # stagings, artifacts <staging>-staging-<job>, unpacked each into its own folder, given to the bundle as
 # BUNDLE_PREFIX_<STAGING> (configure preset bundle-prefixes), the commits as BUNDLE_REVISION_<LAYER>, the installer
-# packed (package preset installer), into the artifact package-<job>. Pushed on schedule and by hand (unless
+# packed (package preset installer), into the artifact package-<job>. On schedule every layer is taken at its main,
+# not at bundle.json's. Pushed on schedule and by hand (unless
 # skip-staging-push), in the bundle's own repository; called from another repository (a layer's CI), never.
 
 on:
@@ -102,6 +103,8 @@ jobs:
         shell: python3 {0}
         env:
           INPUTS: ${{ toJSON(inputs) }}
+          # the bundle's own schedule, not a caller's: a scheduled workflow calling this one has that event too
+          SCHEDULED: ${{ github.event_name == 'schedule' && github.repository == 'openDAQ/openDAQ-bundle' }}
         run: |
           import json, os, re, subprocess, sys
 
@@ -145,14 +148,16 @@ jobs:
           if "opendaq" in excluded:
               sys.exit("::error::exclude-stagings leaves out opendaq, the core: the modules are built against it")
 
-          # bundle.json's revisions, each replaced by an input that is set; the stagings left out dropped
+          # bundle.json's revisions, each replaced by an input that is set; on schedule every layer's main instead, as
+          # a module's schedule stages against the core's main; the stagings left out dropped
+          scheduled = os.environ["SCHEDULED"] == "true"
           revision = {}
           for layer, ref in json.load(open("bundle.json"))["layers"].items():
               staging = STAGINGS[layer]
               if staging in excluded:
                   continue
               given = (inputs.get(staging) or "").strip()
-              revision[staging] = commit(staging, given or ref)
+              revision[staging] = commit(staging, given or ("main" if scheduled else ref))
 
           platforms = [{"job": job, "triplet": triplet, "generator": generator}
                        for job, (triplet, generator) in JOBS.items()]
