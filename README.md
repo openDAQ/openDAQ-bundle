@@ -90,11 +90,11 @@ module_hash() { pkg_hash org.opencontainers.image.revision=$1 com.opendaq.depend
                          com.opendaq.package.triplet=$3; }
 
 # the revisions, full commits: the core, and the modules built against it
-rev_opendaq=<openDAQ commit>
-rev_opcua_modules=<OpcUaModules commit>
-rev_mqtt_module=<MQTTStreamingModule commit>
-rev_lt_streaming_modules=<LTStreamingModulesModern commit>
-rev_asam_cmp_modules=<ASAM-CMP-Modules commit>
+rev_core=<openDAQ commit>
+rev_opcua=<OpcUaModules commit>
+rev_mqtt=<MQTTStreamingModule commit>
+rev_lt=<LTStreamingModulesModern commit>
+rev_asam=<ASAM-CMP-Modules commit>
 
 # the triplets:
 #   x86_64-linux-gcc-11-release
@@ -104,11 +104,11 @@ rev_asam_cmp_modules=<ASAM-CMP-Modules commit>
 #   x86_64-macos-apple-clang-21-release
 triplet=x86_64-linux-gcc-11-release
 
-tag_opendaq=pkg-$(core_hash $rev_opendaq $triplet)
-tag_opcua_modules=pkg-$(module_hash $rev_opcua_modules $rev_opendaq $triplet)
-tag_mqtt_module=pkg-$(module_hash $rev_mqtt_module $rev_opendaq $triplet)
-tag_lt_streaming_modules=pkg-$(module_hash $rev_lt_streaming_modules $rev_opendaq $triplet)
-tag_asam_cmp_modules=pkg-$(module_hash $rev_asam_cmp_modules $rev_opendaq $triplet)
+tag_opendaq=pkg-$(core_hash $rev_core $triplet)
+tag_opcua_modules=pkg-$(module_hash $rev_opcua $rev_core $triplet)
+tag_mqtt_module=pkg-$(module_hash $rev_mqtt $rev_core $triplet)
+tag_lt_streaming_modules=pkg-$(module_hash $rev_lt $rev_core $triplet)
+tag_asam_cmp_modules=pkg-$(module_hash $rev_asam $rev_core $triplet)
 ```
 
 Pull each staging and unpack it into a directory of its own; the core's tarball holds its prefix, `opt/opendaq`,
