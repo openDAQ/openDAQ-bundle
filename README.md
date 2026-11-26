@@ -81,7 +81,13 @@ newline after the last): the commit it is built of, the triplet of its platform 
 commit it is built against. On macOS use `shasum -a 256` in place of `sha256sum`:
 
 ```bash
-pkg() { printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1; }
+# the sha256 of its arguments, key=value, sorted and joined by newlines
+pkg_hash() { printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1; }
+# the core: its commit, the triplet
+core_hash() { pkg_hash org.opencontainers.image.revision=$1 com.opendaq.package.triplet=$2; }
+# a module: its commit, the core's commit it is built against, the triplet
+module_hash() { pkg_hash org.opencontainers.image.revision=$1 com.opendaq.dependencies.opendaq.revision=$2 \
+                         com.opendaq.package.triplet=$3; }
 
 # the revisions, full commits: the core, and the modules built against it
 opendaq=<openDAQ commit>
@@ -98,13 +104,11 @@ asam_cmp_modules=<ASAM-CMP-Modules commit>
 #   x86_64-macos-apple-clang-21-release
 triplet=x86_64-linux-gcc-11-release
 
-opendaq_tag=pkg-$(pkg org.opencontainers.image.revision=$opendaq com.opendaq.package.triplet=$triplet)
-module_tag() { echo pkg-$(pkg org.opencontainers.image.revision=$1 \
-                              com.opendaq.dependencies.opendaq.revision=$opendaq com.opendaq.package.triplet=$triplet); }
-opcua_modules_tag=$(module_tag $opcua_modules)
-mqtt_module_tag=$(module_tag $mqtt_module)
-lt_streaming_modules_tag=$(module_tag $lt_streaming_modules)
-asam_cmp_modules_tag=$(module_tag $asam_cmp_modules)
+opendaq_tag=pkg-$(core_hash $opendaq $triplet)
+opcua_modules_tag=pkg-$(module_hash $opcua_modules $opendaq $triplet)
+mqtt_module_tag=pkg-$(module_hash $mqtt_module $opendaq $triplet)
+lt_streaming_modules_tag=pkg-$(module_hash $lt_streaming_modules $opendaq $triplet)
+asam_cmp_modules_tag=pkg-$(module_hash $asam_cmp_modules $opendaq $triplet)
 ```
 
 Pull each staging and unpack it into a directory of its own; the core's tarball holds its prefix, `opt/opendaq`,
