@@ -10,7 +10,7 @@ Each of these repositories is a **layer** at one revision, the one `bundle.json`
 its **staging**: `opendaq`, `opcua-modules`, `mqtt-module`, `lt-streaming-modules`, `asam-cmp-modules`. The bundle
 builds every layer from its sources in one tree, fetched with CMake's `FetchContent`, or takes every staging
 prebuilt from a directory given (`BUNDLE_FROM=STAGINGS`, `BUNDLE_PREFIX_<STAGING>`), and packs installers. In CI the
-stagings come from the registry or are staged in the run, and the bundle only packs them (`.github/workflows`). What
+stagings come from the registry or are staged in the run, and the bundle only packs them (see [CI](#ci)). What
 the bundle is made of is `cmake/Layers.cmake`; built from sources, `cmake/Sources.cmake`; from prebuilt
 stagings, `cmake/Stagings.cmake`; packed, `cmake/Packing.cmake`.
 
@@ -33,7 +33,7 @@ Use one of the available CMake presets:
 
 | Preset | Platform | Compiler | Arch | Config |
 |---|---|---|---|---|
-| `bundle-native` | this machine | default | this machine | Release, the layers at `bundle.json`'s commits |
+| `bundle-native` | this machine | default | this machine | Release, the layers at `bundle.json`'s revisions |
 | `x64/msvc-22` | Windows | MSVC 2022 | x64 | Release |
 | `x86/msvc-22` | Windows | MSVC 2022 | x86 | Release |
 | `x64/msvc-17` | Windows | MSVC 2017 | x64 | Release |
@@ -43,7 +43,9 @@ Use one of the available CMake presets:
 | `x64/clang/release` | Linux | Clang | x64 | Release |
 | `x64/clang/debug` | Linux | Clang | x64 | Debug |
 
-Every preset builds the layers at the commits `bundle.json` names, from their sources unless a staging is given.
+Every preset builds the layers at the revisions `bundle.json` names, from their sources unless a staging is given.
+On `main` these are the layers' `main` branches, each taken at its head when the build is configured; a release
+branch names the layers' release tags.
 
 ```bash
 # Windows
@@ -128,9 +130,40 @@ The packages land in `build/bundle-native/packages`, named `opendaq-<bundle|core
 
 ## Tests
 
-An installed bundle, smoke-checked as CI does: the C++ API and the C binding each load every module of the prefix.
+A smoke check of an installed bundle, run by hand: the C++ API and the C binding each load every module of the
+prefix.
 
 ```bash
 cmake -S tests/installed -B build/installed -DOPENDAQ_PREFIX=/opt/opendaq
 cmake --build build/installed && ctest --test-dir build/installed --verbose
+```
+
+## CI
+
+One workflow, [`bundle.yml`](.github/workflows/bundle.yml), builds the installers (DEB, NSIS, productbuild) for five
+platforms from the stagings, nothing compiled but a staging the registry lacks:
+
+1. **Resolve revisions**: a commit per layer: `bundle.json`'s, or an input in its place; on schedule each layer's
+   `main`. A module's staging is the one built against the bundle's core.
+2. **Pull stagings**: those the registry has, from `ghcr.io/opendaq/staging/<staging>`.
+3. **Stage &lt;layer&gt;**: those it lacks, built in the run by the layer's own `stage.yml`, not published.
+4. **Configure** and **Build**: the configure preset `bundle-prefixes`, the package preset `installer`.
+5. **Push**: the installers to `ghcr.io/opendaq/bundle/native`, tagged by the commits they are built of
+   (`idx-<sha256>` for the bundle, `pkg-<sha256>` for each platform).
+
+It runs:
+
+| Trigger | Revisions | Published |
+|---|---|---|
+| Schedule, Mondays 06:00 UTC, after the layers' stagings | every layer's `main` | yes |
+| By hand (Actions → Bundle → Run workflow) | `bundle.json`'s, each replaced by an input given: a commit, branch or tag; `exclude-stagings` leaves modules out | unless `skip-staging-push` |
+| Called by another repository (`uses: openDAQ/openDAQ-bundle/.github/workflows/bundle.yml@main`) | as by hand | never: the installers stay artifacts of the run, `package-<job>` |
+
+[`cleanup.yml`](.github/workflows/cleanup.yml) prunes the published bundles after 30 days.
+
+A published installer is pulled as a staging is (see [Prebuilt stagings](#prebuilt-stagings) for the login):
+
+```bash
+oras repo tags ghcr.io/opendaq/bundle/native
+oras pull ghcr.io/opendaq/bundle/native:pkg-<sha256> -o downloads/bundle
 ```
