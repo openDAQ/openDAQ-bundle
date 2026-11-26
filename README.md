@@ -104,19 +104,19 @@ rev_asam_cmp_modules=<ASAM-CMP-Modules commit>
 #   x86_64-macos-apple-clang-21-release
 triplet=x86_64-linux-gcc-11-release
 
-opendaq_tag=pkg-$(core_hash $rev_opendaq $triplet)
-opcua_modules_tag=pkg-$(module_hash $rev_opcua_modules $rev_opendaq $triplet)
-mqtt_module_tag=pkg-$(module_hash $rev_mqtt_module $rev_opendaq $triplet)
-lt_streaming_modules_tag=pkg-$(module_hash $rev_lt_streaming_modules $rev_opendaq $triplet)
-asam_cmp_modules_tag=pkg-$(module_hash $rev_asam_cmp_modules $rev_opendaq $triplet)
+tag_opendaq=pkg-$(core_hash $rev_opendaq $triplet)
+tag_opcua_modules=pkg-$(module_hash $rev_opcua_modules $rev_opendaq $triplet)
+tag_mqtt_module=pkg-$(module_hash $rev_mqtt_module $rev_opendaq $triplet)
+tag_lt_streaming_modules=pkg-$(module_hash $rev_lt_streaming_modules $rev_opendaq $triplet)
+tag_asam_cmp_modules=pkg-$(module_hash $rev_asam_cmp_modules $rev_opendaq $triplet)
 ```
 
 Pull each staging and unpack it into a directory of its own; the core's tarball holds its prefix, `opt/opendaq`,
 except on Windows:
 
 ```bash
-for staging in opendaq:$opendaq_tag opcua-modules:$opcua_modules_tag mqtt-module:$mqtt_module_tag \
-               lt-streaming-modules:$lt_streaming_modules_tag asam-cmp-modules:$asam_cmp_modules_tag; do
+for staging in opendaq:$tag_opendaq opcua-modules:$tag_opcua_modules mqtt-module:$tag_mqtt_module \
+               lt-streaming-modules:$tag_lt_streaming_modules asam-cmp-modules:$tag_asam_cmp_modules; do
     name=${staging%%:*}
     oras pull ghcr.io/opendaq/staging/$staging -o downloads/$name
     mkdir -p stagings/$name && tar -xzf downloads/$name/*.tar.gz -C stagings/$name
