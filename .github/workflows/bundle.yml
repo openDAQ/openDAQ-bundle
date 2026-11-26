@@ -395,10 +395,13 @@ jobs:
       cmake-presets: ${{ needs.configure.outputs.cmake-presets }}
       cpack-presets: ${{ needs.configure.outputs.cpack-presets }}
 
+  # always(): a stage job skipped, its staging pulled, would skip this one too
   push:
     name: Push
     needs: [configure, build]
-    if: github.repository == 'openDAQ/openDAQ-bundle' && !inputs.skip-staging-push
+    if: >-
+      always() && needs.build.result == 'success'
+      && github.repository == 'openDAQ/openDAQ-bundle' && !inputs.skip-staging-push
     permissions:
       contents: read
       packages: write
