@@ -37,26 +37,46 @@ foreach(_staging IN LISTS BUNDLE_STAGINGS)
     endforeach()
 endforeach()
 
+opendaq_detect_settings()
+
+# what the packages are built from, each layer's commit, dependencies.<staging>.revision in staging-meta.json: the
+# bundle's identity when published. Built here, the commit its sources are at, a branch or tag taken at its head
+# resolved; prebuilt, the revision given (CI gives commits)
+find_package(Git QUIET)
+foreach(_entry IN LISTS BUNDLE_LAYERS)
+    string(REPLACE "=" ";" _pair "${_entry}")
+    list(GET _pair 0 _layer)
+    list(GET _pair 1 _staging)
+    string(TOUPPER "${_layer}" _upper)
+    string(TOLOWER "${_layer}" _lower)
+    set(_revision "${BUNDLE_REVISION_${_upper}}")
+    if (BUNDLE_FROM STREQUAL "SOURCES" AND GIT_EXECUTABLE)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+                        WORKING_DIRECTORY "${${_lower}_SOURCE_DIR}"
+                        OUTPUT_VARIABLE _head OUTPUT_STRIP_TRAILING_WHITESPACE
+                        RESULT_VARIABLE _result ERROR_QUIET)
+        if (_result EQUAL 0)
+            set(_revision "${_head}")
+        endif()
+    endif()
+    opendaq_set_metadata_field(dependencies ${_staging} revision VALUE "${_revision}")
+endforeach()
+
+# installed with the bundle, share/opendaq-bundle/build-meta.json, as the core's share/opendaq/build-meta.json: what
+# the build is, the settings and the commit of every layer. No package section: one build yields several packages,
+# and a copy sealed inside all of them could name only one
+opendaq_write_metadata(OUTPUT "${CMAKE_BINARY_DIR}/bundle/build-meta.json")
+install(FILES "${CMAKE_BINARY_DIR}/bundle/build-meta.json" DESTINATION share/opendaq-bundle COMPONENT bundle_Runtime)
+
 # the name, the version and the triplet, by the utils; a package preset renames it
 set(CPACK_OPENDAQ_META_PACKAGE_NAME "opendaq-bundle")
 set(CPACK_OPENDAQ_META_PACKAGE_VERSION "${BUNDLE_VERSION}")
-opendaq_detect_settings()
 opendaq_detect_package()
 opendaq_compose_package_triplet()
 if (BUNDLE_TRIPLET)
     set(CPACK_OPENDAQ_META_PACKAGE_TRIPLET "${BUNDLE_TRIPLET}")
 endif()
 opendaq_compose_package_file_name()
-
-# what the packages are built from, each layer's commit, dependencies.<staging>.revision in staging-meta.json: the
-# bundle's identity when published
-foreach(_entry IN LISTS BUNDLE_LAYERS)
-    string(REPLACE "=" ";" _pair "${_entry}")
-    list(GET _pair 0 _layer)
-    list(GET _pair 1 _staging)
-    string(TOUPPER "${_layer}" _upper)
-    opendaq_set_metadata_field(dependencies ${_staging} revision VALUE "${BUNDLE_REVISION_${_upper}}")
-endforeach()
 
 set(CPACK_PACKAGE_NAME "${CPACK_OPENDAQ_META_PACKAGE_NAME}")
 set(CPACK_PACKAGE_VENDOR "openDAQ d.o.o.")
@@ -177,12 +197,12 @@ set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/CPackOptions.cmake")
 
 include(CPack)
 
-# macOS has no uninstall: the package brings a script that removes its files by its receipts, a component of the
-# bundle's own, which CPackOptions.cmake adds to a productbuild package
+# the bundle's own component, in every package (CPackOptions.cmake): its metadata and, as macOS has no uninstall,
+# a script that removes the package's files by its receipts
 if (APPLE)
     install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/productbuild/uninstall-opendaq-bundle.sh" DESTINATION bin COMPONENT bundle_Runtime)
-    cpack_add_component(bundle_Runtime DISPLAY_NAME "uninstall script" REQUIRED)
 endif()
+cpack_add_component(bundle_Runtime DISPLAY_NAME "bundle" REQUIRED)
 
 # an installer's choices (NSIS, productbuild): each module a choice of its own in the group Modules, selected;
 # the rest required. A prebuilt staging has <staging>_Runtime, <staging>_Development and a <module>_Runtime per
