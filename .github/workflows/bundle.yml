@@ -17,7 +17,7 @@ name: Bundle
 on:
   # Mondays, after the stagings of the layers (core 02:00, modules 05:00)
   schedule:
-    - cron: '0 8 * * 1'
+    - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       opendaq:
