@@ -83,23 +83,40 @@ commit it is built against. On macOS use `shasum -a 256` in place of `sha256sum`
 ```bash
 pkg() { printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1; }
 
-core=<openDAQ commit, in full>
-triplet=x86_64-linux-gcc-11-release   # x86_64-windows-msvc-143-release, armv8-macos-apple-clang-21-release, …
+# the revisions, full commits: the core, and the modules built against it
+opendaq=<openDAQ commit>
+opcua_modules=<OpcUaModules commit>
+mqtt_module=<MQTTStreamingModule commit>
+lt_streaming_modules=<LTStreamingModulesModern commit>
+asam_cmp_modules=<ASAM-CMP-Modules commit>
 
-# the core
-echo pkg-$(pkg org.opencontainers.image.revision=$core com.opendaq.package.triplet=$triplet)
-# a module, e.g. OpcUaModules
-echo pkg-$(pkg org.opencontainers.image.revision=<OpcUaModules commit, in full> \
-               com.opendaq.dependencies.opendaq.revision=$core com.opendaq.package.triplet=$triplet)
+# the triplets:
+#   x86_64-linux-gcc-11-release
+#   armv8-linux-gcc-11-release
+#   x86_64-windows-msvc-143-release
+#   armv8-macos-apple-clang-21-release
+#   x86_64-macos-apple-clang-21-release
+triplet=x86_64-linux-gcc-11-release
+
+opendaq_tag=pkg-$(pkg org.opencontainers.image.revision=$opendaq com.opendaq.package.triplet=$triplet)
+module_tag() { echo pkg-$(pkg org.opencontainers.image.revision=$1 \
+                              com.opendaq.dependencies.opendaq.revision=$opendaq com.opendaq.package.triplet=$triplet); }
+opcua_modules_tag=$(module_tag $opcua_modules)
+mqtt_module_tag=$(module_tag $mqtt_module)
+lt_streaming_modules_tag=$(module_tag $lt_streaming_modules)
+asam_cmp_modules_tag=$(module_tag $asam_cmp_modules)
 ```
 
-Pull each staging for your platform and unpack it into a directory of its own; the core's tarball holds its prefix,
-`opt/opendaq`, except on Windows:
+Pull each staging and unpack it into a directory of its own; the core's tarball holds its prefix, `opt/opendaq`,
+except on Windows:
 
 ```bash
-oras pull ghcr.io/opendaq/staging/opendaq:pkg-<sha256> -o downloads/opendaq
-mkdir -p stagings/opendaq && tar -xzf downloads/opendaq/*.tar.gz -C stagings/opendaq
-# … the same for opcua-modules, mqtt-module, lt-streaming-modules, asam-cmp-modules
+for staging in opendaq:$opendaq_tag opcua-modules:$opcua_modules_tag mqtt-module:$mqtt_module_tag \
+               lt-streaming-modules:$lt_streaming_modules_tag asam-cmp-modules:$asam_cmp_modules_tag; do
+    name=${staging%%:*}
+    oras pull ghcr.io/opendaq/staging/$staging -o downloads/$name
+    mkdir -p stagings/$name && tar -xzf downloads/$name/*.tar.gz -C stagings/$name
+done
 ```
 
 Configure with `BUNDLE_FROM=STAGINGS` and a `BUNDLE_PREFIX_<STAGING>` for each, then build and pack; nothing is
