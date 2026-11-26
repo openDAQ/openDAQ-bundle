@@ -76,8 +76,25 @@ gh auth refresh -h github.com -s read:packages
 gh auth token | oras login ghcr.io -u <github user> --password-stdin
 ```
 
+A package is tagged `pkg-<sha256>`, the sha256 of the lines `key=value` below, sorted and joined by newlines (no
+newline after the last): the commit it is built of, the triplet of its platform and, for a module, the core's
+commit it is built against. On macOS use `shasum -a 256` in place of `sha256sum`:
+
+```bash
+pkg() { printf '%s' "$(printf '%s\n' "$@" | LC_ALL=C sort)" | sha256sum | cut -d' ' -f1; }
+
+core=<openDAQ commit, in full>
+triplet=x86_64-linux-gcc-11-release   # x86_64-windows-msvc-143-release, armv8-macos-apple-clang-21-release, …
+
+# the core
+echo pkg-$(pkg org.opencontainers.image.revision=$core com.opendaq.package.triplet=$triplet)
+# a module, e.g. OpcUaModules
+echo pkg-$(pkg org.opencontainers.image.revision=<OpcUaModules commit, in full> \
+               com.opendaq.dependencies.opendaq.revision=$core com.opendaq.package.triplet=$triplet)
+```
+
 Pull each staging for your platform and unpack it into a directory of its own; the core's tarball holds its prefix,
-`opt/opendaq`, except on Windows. A package's tag, `pkg-<sha256>`, is listed by `oras repo tags`:
+`opt/opendaq`, except on Windows:
 
 ```bash
 oras pull ghcr.io/opendaq/staging/opendaq:pkg-<sha256> -o downloads/opendaq
