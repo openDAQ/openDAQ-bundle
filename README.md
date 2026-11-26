@@ -60,5 +60,12 @@ Pass options at configure time:
 
 ```bash
 cmake --preset="x64/gcc/release" -DBUNDLE_ENABLE_TESTS=ON
+
+# BUNDLE_STAGINGS: a list separated by semicolons; a module left out of it is left out of the bundle
+#   opendaq                 openDAQ (required)
+#   opcua-modules           OpcUaModules
+#   mqtt-module             MQTTStreamingModule
+#   lt-streaming-modules    LTStreamingModulesModern
+#   asam-cmp-modules        ASAM-CMP-Modules
 cmake --preset="x64/gcc/release" -DBUNDLE_STAGINGS="opendaq;opcua-modules;mqtt-module;lt-streaming-modules"   # without ASAM CMP
 ```
